@@ -1,0 +1,12 @@
+# Tell CrowdSec to parse Traefik access logs + enable AppSec
+filenames:
+  - /var/log/traefik/access.log
+labels:
+  type: traefik
+---
+listen_addr: 0.0.0.0:7422
+appsec_config: crowdsecurity/appsec-default
+name: appsec
+source: appsec
+labels:
+  type: appsec

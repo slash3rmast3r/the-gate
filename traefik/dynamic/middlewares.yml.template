@@ -1,0 +1,106 @@
+http:
+  middlewares:
+    secure-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        frameDeny: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        customFrameOptionsValue: SAMEORIGIN
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        customResponseHeaders:
+          Server: ""
+          X-Robots-Tag: "noindex,nofollow"
+
+    crowdsec:
+      plugin:
+        crowdsec:
+          enabled: true
+          crowdsecMode: stream
+          crowdsecLapiScheme: http
+          crowdsecLapiHost: crowdsec:8080
+          crowdsecLapiKey: "${BOUNCER_KEY_TRAEFIK}"
+          crowdsecAppsecEnabled: true
+          crowdsecAppsecHost: crowdsec:7422
+          crowdsecAppsecFailureBlock: true
+          crowdsecAppsecUnreachableBlock: false
+          updateIntervalSeconds: 60
+          defaultDecisionSeconds: 60
+          forwardedHeadersTrustedIPs:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 127.0.0.1/32
+          logLevel: INFO
+
+    authentik-forward:
+      forwardAuth:
+        address: "${AUTHENTIK_FORWARD_URL}"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-authentik-username
+          - X-authentik-groups
+          - X-authentik-email
+          - X-authentik-name
+          - X-authentik-uid
+
+    gate-errors:
+      errors:
+        status:
+          - "401"
+          - "403"
+          - "404"
+          - "429"
+          - "500"
+          - "502"
+          - "503"
+        service: gate-errorpages
+        query: "/{status}.html"
+
+    coraza-crs:
+      plugin:
+        coraza:
+          directives:
+            - SecRuleEngine On
+            - SecRequestBodyAccess On
+            - SecResponseBodyAccess Off
+            - SecRequestBodyLimit 13107200
+            - Include /etc/coraza/crs-setup.conf
+            - Include /etc/coraza/rules/*.conf
+
+    coraza-light:
+      plugin:
+        coraza:
+          directives:
+            - SecRuleEngine On
+            - SecRequestBodyAccess Off
+            - SecResponseBodyAccess Off
+            - Include /etc/coraza/crs-setup.conf
+            - Include /etc/coraza/rules/*.conf
+
+    rate-limit-soft:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1s
+
+    rate-limit-strict:
+      rateLimit:
+        average: 20
+        burst: 10
+        period: 1s
+
+    rate-limit-dos:
+      rateLimit:
+        average: 5
+        burst: 10
+        period: 1s
+
+  services:
+    gate-errorpages:
+      loadBalancer:
+        servers:
+          - url: "http://gate-errors:80"

@@ -1,0 +1,16 @@
+.env
+*.local
+logs/traefik/*.log
+traefik/dynamic/middlewares.yml
+traefik/dynamic/app-*.yml
+coraza/rules/*
+!coraza/rules/REQUEST-901-INITIALIZATION.conf
+!coraza/rules/REQUEST-949-BLOCKING-EVALUATION.conf
+frontend/node_modules/
+frontend/dist/
+backend/gate
+backend/gate.exe
+.DS_Store
+*.bak
+.idea/
+.vscode/
