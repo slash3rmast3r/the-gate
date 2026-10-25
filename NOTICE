@@ -1,0 +1,17 @@
+The Gate
+Copyright (c) 2026 Carlo Savino — Over The Cloud
+Website: https://overthecloud.it
+Licensed under the MIT License. See LICENSE.
+
+This product includes or orchestrates third-party software that remains under
+their respective licenses, including (non-exhaustive):
+
+  - Traefik (MIT) — https://github.com/traefik/traefik
+  - CrowdSec (MIT) — https://github.com/crowdsecurity/crowdsec
+  - Coraza / coraza-http-wasm-traefik (Apache-2.0) — https://github.com/corazawaf
+  - OWASP Core Rule Set (Apache-2.0) — https://github.com/coreruleset/coreruleset
+  - crowdsec-bouncer-traefik-plugin (MIT)
+  - Gin, GORM, React, Vite, and other dependencies as declared in go.mod / package.json
+
+The Gate is an independent product of Over The Cloud and is not affiliated with
+Chaitin Tech / SafeLine.
