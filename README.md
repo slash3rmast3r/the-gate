@@ -2,6 +2,8 @@
 
 **Author:** Carlo Savino · **Company:** [Over The Cloud](https://overthecloud.it) · **License:** [MIT](./LICENSE) · **Web:** [overthecloud.it](https://overthecloud.it)
 
+CI: GitHub Actions (secret scan, Go, frontend build, Compose validate, Docker image build). Release tags `v*` publish images to GHCR.
+
 WAF / reverse-proxy **self-hosted** indipendente, pensato per girare interamente in **Docker Compose**.
 
 Stack: **Traefik v3** + **CrowdSec** (ban + AppSec) + **Coraza / OWASP CRS**, con UI di gestione applicazioni (stile SafeLine) — senza registry Chaitin e senza limiti sul numero di siti.
@@ -223,10 +225,12 @@ scripts/             # bootstrap Win/Linux, fetch-crs, backup
 ## Note operative
 
 1. Senza CRS completo (`bootstrap` / `fetch-crs` / pulsante Settings) il modo WAF `full` è quasi vuoto.
-2. Aggiornamento CrowdSec Hub da UI usa `docker.sock` (già montato in compose).
+2. **CrowdSec Hub da UI** richiede il mount di `docker.sock` (non attivo di default). Abilitalo solo se serve:
+   `docker compose -f docker-compose.yml -f docker-compose.hub-update.yml up -d`
 3. Non pubblicare Postgres né `gate-api` su Internet; limita l’accesso a `:9444` (firewall/VPN).
 4. Cloudflare “arancione” può interferire con HTTP-01 Let’s Encrypt: grey-cloud in fase di emissione o DNS-01.
 5. Upstream sull’host fisico: `http://host.docker.internal:<porta>` (già configurato su Traefik).
+6. Non committare `.env` — solo `.env.example` (placeholder). Vedi [`SECURITY.md`](./SECURITY.md).
 
 The Gate **non** è un fork binario di SafeLine: è uno stack Docker open standard con UX di gestione simile.
 

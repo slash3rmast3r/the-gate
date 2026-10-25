@@ -1,16 +1,52 @@
+# Secrets & local env
 .env
-*.local
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+*.secret
+credentials.json
+secrets/
+
+# Runtime / generated Traefik
 logs/traefik/*.log
+logs/traefik/*.json
 traefik/dynamic/middlewares.yml
 traefik/dynamic/app-*.yml
+traefik/certs/
+**/acme.json
+
+# Full OWASP CRS download (keep starter rules only)
 coraza/rules/*
 !coraza/rules/REQUEST-901-INITIALIZATION.conf
 !coraza/rules/REQUEST-949-BLOCKING-EVALUATION.conf
+
+# Backups
+backups/
+*.sql
+*.sql.gz
+
+# Build artifacts
 frontend/node_modules/
 frontend/dist/
 backend/gate
 backend/gate.exe
+backend/coverage.out
+*.exe
+*.test
+
+# IDE / OS
 .DS_Store
+Thumbs.db
 *.bak
+*.swp
 .idea/
 .vscode/
+*.local
+
+# Docker optional local overrides (may mount docker.sock)
+docker-compose.override.yml

@@ -1,0 +1,17 @@
+title = "The Gate"
+
+[allowlist]
+description = "Placeholders and public branding"
+paths = [
+  '''\.env\.example$''',
+  '''LICENSE$''',
+  '''NOTICE$''',
+  '''SECURITY\.md$''',
+  '''README\.md$''',
+  '''\.github/workflows/.*''',
+]
+regexes = [
+  '''CHANGE_ME_''',
+  '''ci-test-password-not-for-prod''',
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+]

@@ -167,7 +167,9 @@ services:
       - ./traefik/dynamic:/traefik-dynamic
       - ./coraza:/coraza
       - ./logs/traefik:/var/log/traefik:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # docker.sock is NOT mounted by default (safer for public deploys).
+      # To enable CrowdSec Hub updates from the UI, also use:
+      #   docker compose -f docker-compose.yml -f docker-compose.hub-update.yml up -d
     networks:
       gate:
         ipv4_address: ${SUBNET_PREFIX:-172.23.223}.4
