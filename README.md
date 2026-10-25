@@ -36,10 +36,11 @@ Admin UI  →  https://<host>:9444  (gate-ui)
 ### Windows (PowerShell + Docker Desktop)
 
 1. Avvia **Docker Desktop** e attendi che il motore sia Ready.
-2. Apri PowerShell nella cartella del progetto:
+2. Clona (o copia) il progetto e apri PowerShell nella cartella del repo:
 
 ```powershell
-cd "C:\Users\info\Desktop\CURSOR PROJECTS\The Gate"
+git clone https://github.com/slash3rmast3r/the-gate.git
+cd the-gate
 .\scripts\bootstrap.ps1
 ```
 
@@ -55,7 +56,7 @@ Lo script:
 **Manuale (senza bootstrap):**
 
 ```powershell
-cd "C:\Users\info\Desktop\CURSOR PROJECTS\The Gate"
+cd the-gate
 Copy-Item .env.example .env
 # modifica .env (password, ACME_EMAIL, BOUNCER_KEY_TRAEFIK, …)
 .\scripts\fetch-crs.ps1
@@ -85,10 +86,11 @@ docker --version
 docker compose version
 ```
 
-2. Entra nella cartella del progetto ed esegui il bootstrap:
+2. Clona il progetto ed esegui il bootstrap:
 
 ```bash
-cd /opt/the-gate   # o il path dove hai clonato/copiato The Gate
+git clone https://github.com/slash3rmast3r/the-gate.git
+cd the-gate
 chmod +x scripts/*.sh
 ./scripts/bootstrap.sh
 ```
@@ -100,7 +102,7 @@ Lo script crea `.env`, fetch CRS, build e `docker compose up -d`.
 **Manuale (senza bootstrap):**
 
 ```bash
-cd /opt/the-gate
+cd the-gate
 cp .env.example .env
 nano .env   # password, ACME_EMAIL, BOUNCER_KEY_TRAEFIK, …
 ./scripts/fetch-crs.sh
