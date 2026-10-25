@@ -82,6 +82,10 @@ export default function Settings() {
             <li>Auto-update: {prot.auto_update ? `every ${prot.auto_update_hours}h` : "off"}</li>
             <li>Admin OIDC: {prot.oidc_admin ? "enabled" : "local only"}</li>
             <li>App forward-auth: <span className="mono">{prot.authentik_forward_url}</span></li>
+            <li>
+              CrowdSec Hub from UI needs optional compose file{" "}
+              <span className="mono">docker-compose.hub-update.yml</span> (docker.sock)
+            </li>
           </ul>
         )}
       </div>

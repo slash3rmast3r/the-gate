@@ -1,0 +1,12 @@
+# Optional override: enable CrowdSec Hub updates from the UI.
+# Requires mounting the Docker socket (elevated trust).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.hub-update.yml up -d
+#
+# Prefer leaving this disabled on shared / internet-exposed hosts.
+
+services:
+  gate-api:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro

@@ -1,0 +1,7 @@
+gate
+gate.exe
+*.md
+coverage.out
+.git
+.gitignore
+**/*_test.go

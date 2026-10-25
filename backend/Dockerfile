@@ -1,14 +1,15 @@
-FROM golang:1.22-alpine AS build
+FROM golang:1.24-alpine AS build
 WORKDIR /src
+ENV GOTOOLCHAIN=auto
 RUN apk add --no-cache git ca-certificates
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/gate ./cmd/gate
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/gate ./cmd/gate
 
 FROM alpine:3.20
-# Runs as root so UI can update CrowdSec via docker.sock and write CRS into ./coraza.
-# Keep the API off the public internet (only behind gate-ui / internal network).
+# Root + docker-cli only needed if you enable docker-compose.hub-update.yml (CrowdSec Hub UI).
+# Keep gate-api off the public internet (behind gate-ui / internal network only).
 RUN apk add --no-cache ca-certificates wget docker-cli
 WORKDIR /app
 COPY --from=build /out/gate /app/gate
