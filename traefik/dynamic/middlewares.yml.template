@@ -47,6 +47,16 @@ http:
           - X-authentik-name
           - X-authentik-uid
 
+    gate-geocheck:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/geo-check"
+        trustForwardHeader: true
+
+    gate-rules:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/rules-check"
+        trustForwardHeader: true
+
     gate-errors:
       errors:
         status:
@@ -77,6 +87,16 @@ http:
           directives:
             - SecRuleEngine On
             - SecRequestBodyAccess Off
+            - SecResponseBodyAccess Off
+            - Include /etc/coraza/crs-setup.conf
+            - Include /etc/coraza/rules/*.conf
+
+    coraza-audit:
+      plugin:
+        coraza:
+          directives:
+            - SecRuleEngine DetectionOnly
+            - SecRequestBodyAccess On
             - SecResponseBodyAccess Off
             - Include /etc/coraza/crs-setup.conf
             - Include /etc/coraza/rules/*.conf

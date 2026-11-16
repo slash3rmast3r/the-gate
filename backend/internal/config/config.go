@@ -20,22 +20,25 @@ type Config struct {
 	CrowdsecLAPIKey   string
 
 	// Authentik / OIDC for Gate admin UI
-	AuthMode          string // local | oidc | both
-	OIDCIssuer        string
-	OIDCClientID      string
-	OIDCClientSecret  string
-	OIDCRedirectURL   string
+	AuthMode         string // local | oidc | both
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCRedirectURL  string
 
 	// Forward-auth URL for protecting applications (Authentik outpost)
 	AuthentikForwardURL string
 
 	// Protection feeds
-	CorazaDir              string
-	CrowdsecContainer      string
-	AutoUpdateProtections  bool
-	AutoUpdateHours        int
-	PublicBaseURL          string // e.g. https://gate.example.com:9444 for OIDC redirects
-	LogDir                 string // Traefik access/error logs
+	CorazaDir             string
+	CrowdsecContainer     string
+	AutoUpdateProtections bool
+	AutoUpdateHours       int
+	PublicBaseURL         string // e.g. https://gate.example.com:9444 for OIDC redirects
+	LogDir                string // Traefik access/error logs
+	ErrorPagesDir         string
+	GeoIPDBPath           string
+	ACMEStoragePath       string // Traefik acme.json
 }
 
 func FromEnv() Config {
@@ -64,27 +67,30 @@ func FromEnv() Config {
 		hours = 24
 	}
 	return Config{
-		Listen:                 getenv("GATE_LISTEN", ":8080"),
-		DBURL:                  dbURL,
-		AdminUser:              getenv("GATE_ADMIN_USER", "admin"),
-		AdminPassword:          mustEnv("GATE_ADMIN_PASSWORD"),
-		SessionSecret:          mustEnv("GATE_SESSION_SECRET"),
-		TraefikDynamicDir:      getenv("GATE_TRAEFIK_DYNAMIC_DIR", "/traefik-dynamic"),
-		BouncerKey:             bouncer,
-		CrowdsecLAPI:           getenv("CROWDSEC_LAPI", "http://crowdsec:8080"),
-		CrowdsecLAPIKey:        getenv("CROWDSEC_LAPI_KEY", bouncer),
-		AuthMode:               authMode,
-		OIDCIssuer:             getenv("GATE_OIDC_ISSUER", ""),
-		OIDCClientID:           getenv("GATE_OIDC_CLIENT_ID", ""),
-		OIDCClientSecret:       getenv("GATE_OIDC_CLIENT_SECRET", ""),
-		OIDCRedirectURL:        getenv("GATE_OIDC_REDIRECT_URL", ""),
-		AuthentikForwardURL:    getenv("AUTHENTIK_FORWARD_URL", "http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"),
-		CorazaDir:              getenv("GATE_CORAZA_DIR", "/coraza"),
-		CrowdsecContainer:      getenv("GATE_CROWDSEC_CONTAINER", "gate-crowdsec"),
-		AutoUpdateProtections:  getenv("GATE_AUTO_UPDATE_PROTECTIONS", "false") == "true",
-		AutoUpdateHours:        hours,
-		PublicBaseURL:          strings.TrimRight(getenv("GATE_PUBLIC_URL", ""), "/"),
-		LogDir:                 getenv("GATE_LOG_DIR", "/var/log/traefik"),
+		Listen:                getenv("GATE_LISTEN", ":8080"),
+		DBURL:                 dbURL,
+		AdminUser:             getenv("GATE_ADMIN_USER", "admin"),
+		AdminPassword:         mustEnv("GATE_ADMIN_PASSWORD"),
+		SessionSecret:         mustEnv("GATE_SESSION_SECRET"),
+		TraefikDynamicDir:     getenv("GATE_TRAEFIK_DYNAMIC_DIR", "/traefik-dynamic"),
+		BouncerKey:            bouncer,
+		CrowdsecLAPI:          getenv("CROWDSEC_LAPI", "http://crowdsec:8080"),
+		CrowdsecLAPIKey:       getenv("CROWDSEC_LAPI_KEY", bouncer),
+		AuthMode:              authMode,
+		OIDCIssuer:            getenv("GATE_OIDC_ISSUER", ""),
+		OIDCClientID:          getenv("GATE_OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:      getenv("GATE_OIDC_CLIENT_SECRET", ""),
+		OIDCRedirectURL:       getenv("GATE_OIDC_REDIRECT_URL", ""),
+		AuthentikForwardURL:   getenv("AUTHENTIK_FORWARD_URL", "http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"),
+		CorazaDir:             getenv("GATE_CORAZA_DIR", "/coraza"),
+		CrowdsecContainer:     getenv("GATE_CROWDSEC_CONTAINER", "gate-crowdsec"),
+		AutoUpdateProtections: getenv("GATE_AUTO_UPDATE_PROTECTIONS", "false") == "true",
+		AutoUpdateHours:       hours,
+		PublicBaseURL:         strings.TrimRight(getenv("GATE_PUBLIC_URL", ""), "/"),
+		LogDir:                getenv("GATE_LOG_DIR", "/var/log/traefik"),
+		ErrorPagesDir:         getenv("GATE_ERRORPAGES_DIR", "/errorpages"),
+		GeoIPDBPath:           getenv("GATE_GEOIP_DB", ""),
+		ACMEStoragePath:       getenv("GATE_ACME_STORAGE", "/letsencrypt/acme.json"),
 	}
 }
 

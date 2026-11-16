@@ -11,25 +11,18 @@ networks:
         - subnet: ${SUBNET_PREFIX:-172.23.223}.0/24
           gateway: ${SUBNET_PREFIX:-172.23.223}.1
 
-volumes:
-  pgdata:
-  traefik-letsencrypt:
-  traefik-plugins:
-  crowdsec-config:
-  crowdsec-data:
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: gate-postgres
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-gate}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-gate}
       TZ: ${TZ:-Europe/Rome}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     networks:
       gate:
         ipv4_address: ${SUBNET_PREFIX:-172.23.223}.2
@@ -45,7 +38,7 @@ services:
   crowdsec:
     image: crowdsecurity/crowdsec:v1.6.9
     container_name: gate-crowdsec
-    restart: unless-stopped
+    restart: always
     environment:
       TZ: ${TZ:-Europe/Rome}
       COLLECTIONS: >-
@@ -57,21 +50,27 @@ services:
       BOUNCER_KEY_traefik: ${BOUNCER_KEY_TRAEFIK:?set BOUNCER_KEY_TRAEFIK}
       GID: "1000"
     volumes:
+      - ./data/crowdsec/config:/etc/crowdsec
+      - ./data/crowdsec/data:/var/lib/crowdsec/data
       - ./crowdsec/acquis.d:/etc/crowdsec/acquis.d:ro
       - ./logs/traefik:/var/log/traefik:ro
-      - crowdsec-config:/etc/crowdsec
-      - crowdsec-data:/var/lib/crowdsec/data
     networks:
       gate:
         ipv4_address: ${SUBNET_PREFIX:-172.23.223}.5
     expose: ["8080", "7422"]
+    healthcheck:
+      test: ["CMD", "cscli", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
     security_opt: ["no-new-privileges:true"]
     dns: ["1.1.1.1", "8.8.8.8"]
 
   whoami:
     image: traefik/whoami:v1.10
     container_name: gate-whoami
-    restart: unless-stopped
+    restart: always
     networks:
       gate:
         ipv4_address: ${SUBNET_PREFIX:-172.23.223}.20
@@ -82,7 +81,7 @@ services:
   gate-errors:
     image: nginx:1.27-alpine
     container_name: gate-errors
-    restart: unless-stopped
+    restart: always
     volumes:
       - ./errorpages:/usr/share/nginx/html:ro
     networks:
@@ -95,10 +94,10 @@ services:
   traefik:
     image: traefik:v3.3
     container_name: gate-traefik
-    restart: unless-stopped
+    restart: always
     depends_on:
       crowdsec:
-        condition: service_started
+        condition: service_healthy
       gate-api:
         condition: service_healthy
       gate-errors:
@@ -111,15 +110,15 @@ services:
       - --certificatesresolvers.le.acme.email=${ACME_EMAIL:-admin@example.com}
     environment:
       TZ: ${TZ:-Europe/Rome}
-      BOUNCER_KEY_TRAEFIK: ${BOUNCER_KEY_TRAEFIK}
+      BOUNCER_KEY_TRAEFIK: ${BOUNCER_KEY_TRAEFIK:?set BOUNCER_KEY_TRAEFIK}
       ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./coraza:/etc/coraza:ro
       - ./logs/traefik:/var/log/traefik
-      - traefik-letsencrypt:/letsencrypt
-      - traefik-plugins:/plugins-storage
+      - ./data/traefik/letsencrypt:/letsencrypt
+      - ./data/traefik/plugins:/plugins-storage
     networks:
       gate:
         ipv4_address: ${SUBNET_PREFIX:-172.23.223}.10
@@ -134,7 +133,7 @@ services:
       dockerfile: Dockerfile
     image: the-gate-api:local
     container_name: gate-api
-    restart: unless-stopped
+    restart: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,6 +150,9 @@ services:
       GATE_TRAEFIK_DYNAMIC_DIR: /traefik-dynamic
       GATE_CORAZA_DIR: /coraza
       GATE_LOG_DIR: /var/log/traefik
+      GATE_ERRORPAGES_DIR: /errorpages
+      GATE_GEOIP_DB: ${GATE_GEOIP_DB:-/geoip/GeoLite2-Country.mmdb}
+      GATE_ACME_STORAGE: /letsencrypt/acme.json
       GATE_CROWDSEC_CONTAINER: gate-crowdsec
       GATE_AUTH_MODE: ${GATE_AUTH_MODE:-local}
       GATE_OIDC_ISSUER: ${GATE_OIDC_ISSUER:-}
@@ -166,10 +168,10 @@ services:
     volumes:
       - ./traefik/dynamic:/traefik-dynamic
       - ./coraza:/coraza
-      - ./logs/traefik:/var/log/traefik:ro
-      # docker.sock is NOT mounted by default (safer for public deploys).
-      # To enable CrowdSec Hub updates from the UI, also use:
-      #   docker compose -f docker-compose.yml -f docker-compose.hub-update.yml up -d
+      - ./logs/traefik:/var/log/traefik
+      - ./errorpages:/errorpages
+      - ./data/geoip:/geoip:ro
+      - ./data/traefik/letsencrypt:/letsencrypt
     networks:
       gate:
         ipv4_address: ${SUBNET_PREFIX:-172.23.223}.4
@@ -188,7 +190,7 @@ services:
       dockerfile: Dockerfile
     image: the-gate-ui:local
     container_name: gate-ui
-    restart: unless-stopped
+    restart: always
     depends_on:
       gate-api:
         condition: service_healthy
@@ -203,4 +205,7 @@ services:
     cap_drop: ["ALL"]
     cap_add: ["NET_BIND_SERVICE"]
     read_only: true
-    tmpfs: ["/tmp", "/var/cache/nginx", "/var/run"]
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=1777
+      - /var/cache/nginx:uid=101,gid=101,mode=1777
+      - /var/run:uid=101,gid=101,mode=1777

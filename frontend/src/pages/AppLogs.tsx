@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, Application } from "../lib/api";
+import { useI18n } from "../i18n/I18nProvider";
 
 type LogEntry = {
   time?: string;
@@ -16,6 +17,7 @@ type LogEntry = {
 };
 
 export default function AppLogs() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const [app, setApp] = useState<Application | null>(null);
   const [kind, setKind] = useState<"access" | "error">("access");
@@ -51,24 +53,24 @@ export default function AppLogs() {
     <>
       <div className="topbar">
         <div>
-          <h1>Logs — {app?.name || "…"}</h1>
+          <h1>{t("appLogs.title")} - {app?.name || "..."}</h1>
           <p>
-            Traefik access / error filtered by host <span className="mono">{app?.host || id}</span>. Auto-refresh 8s.
+            {t("appLogs.description")} <span className="mono">{app?.host || id}</span>. {t("appLogs.autoRefresh")}
           </p>
         </div>
         <div className="row">
           <Link className="btn" to="/">
-            ← Applications
+            {"<-"} {t("appLogs.backToApplications")}
           </Link>
           <button className="btn" onClick={() => load()} disabled={loading}>
-            Refresh
+            {t("common.refresh")}
           </button>
         </div>
       </div>
 
       <div className="panel" style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
         <label style={{ display: "grid", gap: 6 }}>
-          Kind
+          {t("appLogs.kind")}
           <select
             value={kind}
             onChange={(e) => {
@@ -77,15 +79,15 @@ export default function AppLogs() {
               load(k, q);
             }}
           >
-            <option value="access">Access (all requests)</option>
-            <option value="error">Error (Traefik log + host match)</option>
+            <option value="access">{t("appLogs.access")}</option>
+            <option value="error">{t("appLogs.error")}</option>
           </select>
         </label>
         <label style={{ display: "grid", gap: 6, flex: 1, minWidth: 180 }}>
-          Filter
+          {t("appLogs.filter")}
           <input
             value={q}
-            placeholder="path, IP, status…"
+            placeholder={t("appLogs.placeholder")}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") load(kind, q);
@@ -93,7 +95,7 @@ export default function AppLogs() {
           />
         </label>
         <button className="btn primary" onClick={() => load(kind, q)}>
-          Apply
+          {t("appLogs.apply")}
         </button>
       </div>
 
@@ -101,27 +103,27 @@ export default function AppLogs() {
 
       <div className="panel">
         {loading && entries.length === 0 ? (
-          <div className="empty">Loading logs…</div>
+          <div className="empty">{t("appLogs.loading")}</div>
         ) : entries.length === 0 ? (
           <div className="empty">
-            No matching entries yet. Generate traffic to the app host, or switch kind.
-            {kind === "access" && " Access log is JSON from Traefik (format enabled in traefik.yml)."}
+            {t("appLogs.noEntries")}
+            {kind === "access" && t("appLogs.accessHint")}
           </div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>Time</th>
+                <th>{t("appLogs.time")}</th>
                 {kind === "access" ? (
                   <>
-                    <th>Client</th>
-                    <th>Method</th>
-                    <th>Path</th>
-                    <th>Status</th>
-                    <th>Duration</th>
+                    <th>{t("appLogs.client")}</th>
+                    <th>{t("appLogs.method")}</th>
+                    <th>{t("appLogs.path")}</th>
+                    <th>{t("appLogs.status")}</th>
+                    <th>{t("appLogs.duration")}</th>
                   </>
                 ) : (
-                  <th>Message</th>
+                  <th>{t("appLogs.message")}</th>
                 )}
               </tr>
             </thead>

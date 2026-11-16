@@ -90,6 +90,10 @@ func (r *Reader) ForHost(host, kind string, limit int, query string) ([]Entry, e
 	return out, nil
 }
 
+func (r *Reader) AccessEntries(limit int) ([]Entry, error) {
+	return r.ForHost("", "access", limit, "")
+}
+
 func hostMatch(entryHost, want string) bool {
 	entryHost = strings.ToLower(strings.TrimSpace(entryHost))
 	if entryHost == want {

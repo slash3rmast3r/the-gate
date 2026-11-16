@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { useI18n } from "../i18n/I18nProvider";
 
 export default function Audit() {
+  const { t } = useI18n();
   const [rows, setRows] = useState<any[]>([]);
   const [error, setError] = useState("");
 
@@ -16,23 +18,23 @@ export default function Audit() {
     <>
       <div className="topbar">
         <div>
-          <h1>Audit</h1>
-          <p>Immutable control-plane actions — who changed what, and when.</p>
+          <h1>{t("audit.title")}</h1>
+          <p>{t("audit.description")}</p>
         </div>
       </div>
       {error && <div className="error">{error}</div>}
       <div className="panel">
         {rows.length === 0 ? (
-          <div className="empty">No audit events yet.</div>
+          <div className="empty">{t("audit.noEvents")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>When</th>
-                <th>Actor</th>
-                <th>Action</th>
-                <th>Target</th>
-                <th>Detail</th>
+                <th>{t("audit.when")}</th>
+                <th>{t("audit.actor")}</th>
+                <th>{t("audit.action")}</th>
+                <th>{t("audit.target")}</th>
+                <th>{t("audit.detail")}</th>
               </tr>
             </thead>
             <tbody>

@@ -1,10 +1,13 @@
 package crowdsec
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -66,4 +69,86 @@ func (c *Client) Decisions() ([]Decision, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *Client) AddDecision(scope, value, typ, duration, reason string) error {
+	if c.key == "" {
+		return fmt.Errorf("crowdsec key empty")
+	}
+	if scope == "" {
+		scope = "Ip"
+	}
+	if typ == "" {
+		typ = "ban"
+	}
+	if duration == "" {
+		duration = "87600h"
+	}
+	if reason == "" {
+		reason = "the-gate"
+	}
+	body, _ := json.Marshal([]map[string]any{{
+		"scope":    scope,
+		"value":    value,
+		"type":     typ,
+		"duration": duration,
+		"scenario": reason,
+		"origin":   "the-gate",
+	}})
+	req, err := http.NewRequest(http.MethodPost, c.base+"/v1/decisions", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Api-Key", c.key)
+	req.Header.Set("Content-Type", "application/json")
+	return c.doNoBody(req)
+}
+
+func (c *Client) DeleteDecision(scope, value string) error {
+	if c.key == "" {
+		return fmt.Errorf("crowdsec key empty")
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("value required")
+	}
+	// Try common CrowdSec LAPI delete shapes (version differences).
+	attempts := []url.Values{
+		{"ip": {value}},
+		{"value": {value}},
+	}
+	if scope != "" {
+		attempts = append([]url.Values{{"scope": {scope}, "value": {value}}}, attempts...)
+	}
+	var last error
+	for _, q := range attempts {
+		req, err := http.NewRequest(http.MethodDelete, c.base+"/v1/decisions?"+q.Encode(), nil)
+		if err != nil {
+			last = err
+			continue
+		}
+		req.Header.Set("X-Api-Key", c.key)
+		if err := c.doNoBody(req); err != nil {
+			last = err
+			continue
+		}
+		return nil
+	}
+	if last == nil {
+		last = fmt.Errorf("delete decision failed")
+	}
+	return last
+}
+
+func (c *Client) doNoBody(req *http.Request) error {
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("crowdsec %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
 }

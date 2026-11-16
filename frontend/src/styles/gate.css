@@ -10,6 +10,11 @@
   --ok: #1f7a4c;
   --warn: #b45309;
   --bad: #b42318;
+  --side-from: #0f3d2e;
+  --side-to: #0a2a20;
+  --side-text: #e8f2ec;
+  --glow-1: rgba(31, 111, 84, 0.12);
+  --glow-2: rgba(196, 92, 38, 0.10);
   --shadow: 0 18px 40px rgba(26, 31, 28, 0.08);
   --radius: 14px;
   --font: "Instrument Sans", system-ui, sans-serif;
@@ -23,8 +28,8 @@ body {
   font-family: var(--font);
   color: var(--ink);
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(31, 111, 84, 0.12), transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, rgba(196, 92, 38, 0.10), transparent 50%),
+    radial-gradient(1200px 600px at 10% -10%, var(--glow-1), transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, var(--glow-2), transparent 50%),
     var(--bg);
 }
 
@@ -39,8 +44,8 @@ button, input, select, textarea { font: inherit; }
 }
 
 .side {
-  background: linear-gradient(180deg, #0f3d2e 0%, #0a2a20 100%);
-  color: #e8f2ec;
+  background: linear-gradient(180deg, var(--side-from) 0%, var(--side-to) 100%);
+  color: var(--side-text);
   padding: 28px 20px;
   display: flex;
   flex-direction: column;
@@ -57,7 +62,7 @@ button, input, select, textarea { font: inherit; }
   letter-spacing: -0.03em;
 }
 .brand span {
-  color: rgba(232, 242, 236, 0.65);
+  color: color-mix(in srgb, var(--side-text) 65%, transparent);
   font-size: 0.85rem;
 }
 
@@ -65,7 +70,7 @@ button, input, select, textarea { font: inherit; }
 .nav a {
   padding: 10px 12px;
   border-radius: 10px;
-  color: rgba(232, 242, 236, 0.82);
+  color: color-mix(in srgb, var(--side-text) 82%, transparent);
 }
 .nav a.active, .nav a:hover {
   background: rgba(255, 255, 255, 0.1);
@@ -247,12 +252,52 @@ button, input, select, textarea { font: inherit; }
   padding: 10px 12px;
   margin-bottom: 12px;
 }
+.ok {
+  background: rgba(34, 120, 70, 0.1);
+  color: var(--ok, #1f7a45);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
 .empty {
   padding: 48px 20px;
   text-align: center;
   color: var(--muted);
   border: 1px dashed var(--line);
   border-radius: var(--radius);
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.chip.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.country-picker .hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.country-grid {
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px 2px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 70%, var(--bg-elev));
 }
 
 @media (max-width: 900px) {

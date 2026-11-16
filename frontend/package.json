@@ -1,7 +1,7 @@
 {
   "name": "the-gate-ui",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The Gate — independent edge WAF control plane UI",
   "author": "Carlo Savino — Over The Cloud <https://overthecloud.it>",
   "homepage": "https://overthecloud.it",

@@ -1,22 +1,28 @@
 # Security Policy
 
+## Supported versions
+
+The Gate is released under MIT. Use the latest `main` / tagged `v*` release for production. Security fixes land on `main` first.
+
 ## Reporting a vulnerability
 
-Please report security issues privately to **Over The Cloud** via [overthecloud.it](https://overthecloud.it) (contact / abuse channels on the site). Do not open public GitHub issues for unfixed vulnerabilities.
+Please report security issues privately to **Over The Cloud**:
 
-## Public repository hygiene
+- Web: [https://overthecloud.it](https://overthecloud.it)
+- Prefer coordinated disclosure; do not open a public GitHub issue for unpatched vulnerabilities.
 
-This repository is intended to be public. It must **never** contain:
+Include: affected version/commit, reproduction steps, impact, and (if possible) a suggested fix.
 
-- Real `.env` files or production secrets
-- API keys, OIDC client secrets, bouncer keys, TLS private keys
-- Live `acme.json`, database dumps, or access logs with client IPs
+## Operational hardening (operators)
 
-Use `.env.example` as a template only. Bootstrap scripts generate random secrets locally.
+1. Never commit a real `.env`. Use `.env.example` and generate strong secrets.
+2. Do not expose Postgres or `gate-api` on the public Internet. Publish only the admin UI port (`GATE_PORT`, default `9444`) and Traefik `80`/`443` as needed.
+3. Prefer VPN / allowlists for the admin UI in production.
+4. Keep protection feeds current (OWASP CRS + CrowdSec Hub) via Settings or `GATE_AUTO_UPDATE_*`.
+5. Mount `docker.sock` (`docker-compose.hub-update.yml`) only on hosts you fully trust.
+6. Rotate `BOUNCER_KEY_TRAEFIK`, `GATE_SESSION_SECRET`, and DB/admin passwords if leaked.
+7. Runtime Traefik files under `traefik/dynamic/app-*.yml` and rendered `middlewares.yml` may contain secrets — they are gitignored; do not publish them.
 
-## Deployment notes
+## Third-party components
 
-- Keep `GATE_PORT` / admin UI off the public internet when possible (VPN / allowlist).
-- Do not expose Postgres or `gate-api` directly.
-- Mounting `/var/run/docker.sock` into `gate-api` is **optional** and powerful — only enable via `docker-compose.hub-update.yml` if you need CrowdSec Hub updates from the UI.
-- Rotate `GATE_ADMIN_PASSWORD`, `GATE_SESSION_SECRET`, `BOUNCER_KEY_TRAEFIK`, and `POSTGRES_PASSWORD` if they ever leak.
+Traefik, CrowdSec, Coraza, OWASP CRS, and plugins retain their own licenses and security processes — see [`NOTICE`](./NOTICE).

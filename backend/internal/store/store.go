@@ -15,7 +15,7 @@ func Open(dsn string) (*gorm.DB, error) {
 }
 
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(&models.User{}, &models.Application{}, &models.AuditEntry{})
+	return db.AutoMigrate(&models.User{}, &models.Application{}, &models.AuditEntry{}, &models.Setting{}, &models.IPGroup{}, &models.SecurityRule{})
 }
 
 func EnsureAdmin(db *gorm.DB, user, pass string) error {
@@ -79,6 +79,14 @@ func CreateApplication(db *gorm.DB, a *models.Application) error {
 	if a.BasicAuthRealm == "" {
 		a.BasicAuthRealm = "The Gate"
 	}
+	if a.DefenseMode == "" {
+		a.DefenseMode = "normal"
+	}
+	if !a.HTTPFlood && !a.BotProtect && !a.Attacks {
+		a.HTTPFlood = true
+		a.BotProtect = true
+		a.Attacks = true
+	}
 	return db.Create(a).Error
 }
 
@@ -108,4 +116,89 @@ func ListAudit(db *gorm.DB, limit int) ([]models.AuditEntry, error) {
 	var rows []models.AuditEntry
 	err := db.Order("created_at desc").Limit(limit).Find(&rows).Error
 	return rows, err
+}
+
+func ListIPGroups(db *gorm.DB) ([]models.IPGroup, error) {
+	var groups []models.IPGroup
+	err := db.Order("kind asc, name asc").Find(&groups).Error
+	return groups, err
+}
+
+func GetIPGroup(db *gorm.DB, id string) (*models.IPGroup, error) {
+	var g models.IPGroup
+	if err := db.First(&g, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+func CreateIPGroup(db *gorm.DB, g *models.IPGroup) error {
+	normalizeIPGroup(g)
+	return db.Create(g).Error
+}
+
+func UpdateIPGroup(db *gorm.DB, g *models.IPGroup) error {
+	normalizeIPGroup(g)
+	return db.Save(g).Error
+}
+
+func DeleteIPGroup(db *gorm.DB, id string) error {
+	return db.Delete(&models.IPGroup{}, "id = ?", id).Error
+}
+
+func normalizeIPGroup(g *models.IPGroup) {
+	g.Name = strings.TrimSpace(g.Name)
+	g.Kind = strings.ToLower(strings.TrimSpace(g.Kind))
+	g.CIDRs = strings.TrimSpace(g.CIDRs)
+	g.Notes = strings.TrimSpace(g.Notes)
+}
+
+func ListSecurityRules(db *gorm.DB) ([]models.SecurityRule, error) {
+	var rows []models.SecurityRule
+	err := db.Order("priority asc, created_at asc").Find(&rows).Error
+	return rows, err
+}
+
+func GetSecurityRule(db *gorm.DB, id string) (*models.SecurityRule, error) {
+	var r models.SecurityRule
+	if err := db.First(&r, "id = ?", id).Error; err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func CreateSecurityRule(db *gorm.DB, r *models.SecurityRule) error {
+	normalizeSecurityRule(r)
+	return db.Create(r).Error
+}
+
+func UpdateSecurityRule(db *gorm.DB, r *models.SecurityRule) error {
+	normalizeSecurityRule(r)
+	return db.Save(r).Error
+}
+
+func DeleteSecurityRule(db *gorm.DB, id string) error {
+	return db.Delete(&models.SecurityRule{}, "id = ?", id).Error
+}
+
+func BumpSecurityRuleHit(db *gorm.DB, id string) {
+	_ = db.Model(&models.SecurityRule{}).Where("id = ?", id).UpdateColumn("hit_count", gorm.Expr("hit_count + 1")).Error
+}
+
+func normalizeSecurityRule(r *models.SecurityRule) {
+	r.Name = strings.TrimSpace(r.Name)
+	r.Scope = strings.ToLower(strings.TrimSpace(r.Scope))
+	r.AppID = strings.TrimSpace(r.AppID)
+	r.Field = strings.ToLower(strings.TrimSpace(r.Field))
+	r.HeaderName = strings.TrimSpace(r.HeaderName)
+	r.Operator = strings.ToLower(strings.TrimSpace(r.Operator))
+	r.Value = strings.TrimSpace(r.Value)
+	r.Action = strings.ToLower(strings.TrimSpace(r.Action))
+	r.Notes = strings.TrimSpace(r.Notes)
+	if r.Scope == "" {
+		r.Scope = "app"
+	}
+	if r.Priority <= 0 {
+		r.Priority = 100
+	}
 }

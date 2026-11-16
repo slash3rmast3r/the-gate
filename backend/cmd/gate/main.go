@@ -9,6 +9,8 @@ import (
 
 	"github.com/overthecloud/the-gate/internal/api"
 	"github.com/overthecloud/the-gate/internal/config"
+	"github.com/overthecloud/the-gate/internal/errorpages"
+	"github.com/overthecloud/the-gate/internal/settings"
 	"github.com/overthecloud/the-gate/internal/store"
 	"github.com/overthecloud/the-gate/internal/traefiksync"
 )
@@ -25,6 +27,10 @@ func main() {
 	if err := store.EnsureAdmin(db, cfg.AdminUser, cfg.AdminPassword); err != nil {
 		log.Fatalf("admin: %v", err)
 	}
+	if err := settings.EnsureDefaults(db, cfg.AutoUpdateProtections, cfg.AutoUpdateHours, 7); err != nil {
+		log.Fatalf("settings: %v", err)
+	}
+	_ = errorpages.RenderAll(cfg.ErrorPagesDir, settings.LoadOps(db).ErrorTipMessage)
 
 	syncer := traefiksync.New(cfg.TraefikDynamicDir, cfg.BouncerKey, cfg.AuthentikForwardURL)
 	if err := syncer.WriteBaseMiddlewares(); err != nil {
@@ -34,7 +40,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("list apps: %v", err)
 	}
-	if err := syncer.SyncApplications(apps); err != nil {
+	groups, _ := store.ListIPGroups(db)
+	if err := syncer.SyncApplications(apps, groups); err != nil {
 		log.Fatalf("sync apps: %v", err)
 	}
 

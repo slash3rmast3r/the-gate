@@ -36,9 +36,15 @@ func (s *Syncer) WriteBaseMiddlewares() error {
 	return os.WriteFile(outPath, []byte(out), 0o644)
 }
 
-func (s *Syncer) SyncApplications(apps []models.Application) error {
+func (s *Syncer) SyncApplications(apps []models.Application, groupSets ...[]models.IPGroup) error {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return err
+	}
+	groups := map[string]models.IPGroup{}
+	for _, set := range groupSets {
+		for _, g := range set {
+			groups[g.ID.String()] = g
+		}
 	}
 	entries, _ := os.ReadDir(s.dir)
 	for _, e := range entries {
@@ -51,7 +57,7 @@ func (s *Syncer) SyncApplications(apps []models.Application) error {
 		if !a.Enabled {
 			continue
 		}
-		if err := s.writeApp(a); err != nil {
+		if err := s.writeApp(a, groups); err != nil {
 			return err
 		}
 	}
@@ -66,15 +72,22 @@ func routerName(a models.Application) string {
 	return "app-" + id
 }
 
-func (s *Syncer) writeApp(a models.Application) error {
+func (s *Syncer) writeApp(a models.Application, groups map[string]models.IPGroup) error {
 	name := routerName(a)
 	allowName := name + "-allowlist"
 	basicName := name + "-basicauth"
 	localMW := map[string]any{}
 
-	mws := middlewaresFor(a, allowName, basicName)
+	cidrs := parseCIDRs(a.AllowCIDRs)
+	if a.AllowGroupID != "" {
+		if g, ok := groups[a.AllowGroupID]; ok && strings.EqualFold(g.Kind, "allow") {
+			cidrs = append(cidrs, parseCIDRs(g.CIDRs)...)
+		}
+	}
 
-	if cidrs := parseCIDRs(a.AllowCIDRs); len(cidrs) > 0 {
+	mws := middlewaresFor(a, allowName, basicName, len(cidrs) > 0)
+
+	if len(cidrs) > 0 {
 		localMW[allowName] = map[string]any{
 			"ipAllowList": map[string]any{"sourceRange": cidrs},
 		}
@@ -97,7 +110,22 @@ func (s *Syncer) writeApp(a models.Application) error {
 		}
 	}
 
-	rule := fmt.Sprintf("Host(`%s`)", a.Host)
+	hosts := []string{a.Host}
+	for _, h := range parseCIDRs(a.ExtraHosts) {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h == "" || strings.EqualFold(h, a.Host) {
+			continue
+		}
+		hosts = append(hosts, h)
+	}
+	hostRules := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		hostRules = append(hostRules, fmt.Sprintf("Host(`%s`)", h))
+	}
+	rule := strings.Join(hostRules, " || ")
+	if len(hostRules) > 1 {
+		rule = "(" + rule + ")"
+	}
 	prefix := strings.TrimSpace(a.PathPrefix)
 	if prefix != "" && prefix != "/" {
 		rule = fmt.Sprintf("%s && PathPrefix(`%s`)", rule, prefix)
@@ -140,9 +168,13 @@ func (s *Syncer) writeApp(a models.Application) error {
 	return os.WriteFile(filepath.Join(s.dir, name+".yml"), b, 0o644)
 }
 
-func middlewaresFor(a models.Application, allowName, basicName string) []string {
+func middlewaresFor(a models.Application, allowName, basicName string, hasAllowlist ...bool) []string {
 	var mws []string
-	if parseCIDRs(a.AllowCIDRs) != nil {
+	allowlist := parseCIDRs(a.AllowCIDRs) != nil
+	if len(hasAllowlist) > 0 {
+		allowlist = hasAllowlist[0]
+	}
+	if allowlist {
 		mws = append(mws, allowName+"@file")
 	}
 	switch strings.ToLower(a.AuthMode) {
@@ -154,31 +186,70 @@ func middlewaresFor(a models.Application, allowName, basicName string) []string 
 		mws = append(mws, "authentik-forward@file")
 	}
 
-	switch a.WAFMode {
-	case "off":
-	case "crowdsec-only":
-		mws = append(mws, "crowdsec@file")
-	case "light":
-		mws = append(mws, "crowdsec@file", "coraza-light@file")
-	default:
-		mws = append(mws, "crowdsec@file", "coraza-crs@file")
+	mode := strings.ToLower(a.DefenseMode)
+	if mode == "" {
+		mode = "normal"
 	}
-	switch a.RateLimit {
-	case "dos":
-		mws = append(mws, "rate-limit-dos@file")
-	case "strict":
-		mws = append(mws, "rate-limit-strict@file")
-	case "soft":
-		mws = append(mws, "rate-limit-soft@file")
-	case "off", "":
-	default:
-		mws = append(mws, "rate-limit-soft@file")
+	botProtect := a.BotProtect || mode == "under_attack"
+	attacks := a.Attacks || mode == "under_attack"
+	httpFlood := a.HTTPFlood || mode == "under_attack"
+
+	if botProtect || strings.EqualFold(a.WAFMode, "crowdsec-only") {
+		mws = appendUnique(mws, "crowdsec@file")
 	}
+	if attacks {
+		switch mode {
+		case "under_attack":
+			mws = appendUnique(mws, "crowdsec@file")
+			mws = appendUnique(mws, "coraza-crs@file")
+		case "audit":
+			mws = appendUnique(mws, "coraza-audit@file")
+		default:
+			switch a.WAFMode {
+			case "off", "crowdsec-only":
+			case "light":
+				mws = appendUnique(mws, "coraza-light@file")
+			default:
+				mws = appendUnique(mws, "coraza-crs@file")
+			}
+		}
+	}
+	if httpFlood {
+		if mode == "under_attack" {
+			mws = append(mws, "rate-limit-dos@file")
+		} else {
+			switch a.RateLimit {
+			case "dos":
+				mws = append(mws, "rate-limit-dos@file")
+			case "strict":
+				mws = append(mws, "rate-limit-strict@file")
+			case "soft":
+				mws = append(mws, "rate-limit-soft@file")
+			case "off", "":
+			default:
+				mws = append(mws, "rate-limit-soft@file")
+			}
+		}
+	}
+	if strings.TrimSpace(a.BlockedCountries) != "" {
+		mws = appendUnique(mws, "gate-geocheck@file")
+	}
+	// Cloudflare-like rules: always evaluate (handler fails open when none match)
+	mws = appendUnique(mws, "gate-rules@file")
 	if a.CustomErrors {
 		mws = append(mws, "gate-errors@file")
 	}
 	mws = append(mws, "secure-headers@file")
 	return mws
+}
+
+func appendUnique(items []string, item string) []string {
+	for _, existing := range items {
+		if existing == item {
+			return items
+		}
+	}
+	return append(items, item)
 }
 
 func parseCIDRs(raw string) []string {
@@ -240,6 +311,14 @@ http:
           - X-authentik-email
           - X-authentik-name
           - X-authentik-uid
+    gate-geocheck:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/geo-check"
+        trustForwardHeader: true
+    gate-rules:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/rules-check"
+        trustForwardHeader: true
     gate-errors:
       errors:
         status:
@@ -265,6 +344,15 @@ http:
           directives:
             - SecRuleEngine On
             - SecRequestBodyAccess Off
+            - Include /etc/coraza/crs-setup.conf
+            - Include /etc/coraza/rules/*.conf
+    coraza-audit:
+      plugin:
+        coraza:
+          directives:
+            - SecRuleEngine DetectionOnly
+            - SecRequestBodyAccess On
+            - SecResponseBodyAccess Off
             - Include /etc/coraza/crs-setup.conf
             - Include /etc/coraza/rules/*.conf
     rate-limit-soft:

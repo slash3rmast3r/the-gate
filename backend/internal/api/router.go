@@ -19,7 +19,10 @@ import (
 	"github.com/overthecloud/the-gate/internal/config"
 	"github.com/overthecloud/the-gate/internal/crowdsec"
 	"github.com/overthecloud/the-gate/internal/models"
+	"github.com/overthecloud/the-gate/internal/notify"
 	"github.com/overthecloud/the-gate/internal/protections"
+	"github.com/overthecloud/the-gate/internal/retention"
+	"github.com/overthecloud/the-gate/internal/settings"
 	"github.com/overthecloud/the-gate/internal/store"
 	"github.com/overthecloud/the-gate/internal/traefiksync"
 	"gorm.io/gorm"
@@ -63,7 +66,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, syncer *traefiksync.Syncer) *gin.
 	r.GET("/api/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"name":      "The Gate",
-			"version":   "0.2.0",
+			"version":   "0.4.0",
 			"author":    "Carlo Savino",
 			"company":   "Over The Cloud",
 			"website":   "https://overthecloud.it",
@@ -72,6 +75,11 @@ func NewRouter(cfg config.Config, db *gorm.DB, syncer *traefiksync.Syncer) *gin.
 		})
 	})
 	r.GET("/api/auth/options", s.authOptions)
+	// Internal Traefik forwardAuth (docker network only; gate-api is not published)
+	r.GET("/internal/geo-check", s.geoCheck)
+	r.HEAD("/internal/geo-check", s.geoCheck)
+	r.GET("/internal/rules-check", s.rulesCheck)
+	r.HEAD("/internal/rules-check", s.rulesCheck)
 
 	r.POST("/api/login", s.login)
 	r.POST("/api/logout", s.logout)
@@ -88,34 +96,86 @@ func NewRouter(cfg config.Config, db *gorm.DB, syncer *traefiksync.Syncer) *gin.
 		api.PUT("/applications/:id", s.updateApp)
 		api.DELETE("/applications/:id", s.deleteApp)
 		api.POST("/applications/:id/toggle", s.toggleApp)
+		api.POST("/applications/:id/defense", s.setDefenseMode)
 		api.GET("/applications/:id/logs", s.appLogs)
 
 		api.GET("/decisions", s.listDecisions)
+		api.DELETE("/decisions", s.deleteDecision)
 		api.GET("/audit", s.listAudit)
 		api.GET("/dashboard", s.dashboard)
 		api.POST("/sync", s.forceSync)
 		api.GET("/export", s.exportApps)
 		api.POST("/import", s.importApps)
+		api.GET("/settings", s.getSettings)
+		api.PUT("/settings", s.putSettings)
+		api.POST("/backup", s.backup)
+		api.GET("/ip-groups", s.listIPGroups)
+		api.POST("/ip-groups", s.createIPGroup)
+		api.PUT("/ip-groups/:id", s.updateIPGroup)
+		api.DELETE("/ip-groups/:id", s.deleteIPGroup)
+		api.GET("/security-rules", s.listSecurityRules)
+		api.POST("/security-rules", s.createSecurityRule)
+		api.PUT("/security-rules/:id", s.updateSecurityRule)
+		api.DELETE("/security-rules/:id", s.deleteSecurityRule)
+		api.GET("/certificates", s.listCertificates)
+		api.POST("/certificates/renew", s.renewCertificate)
+		api.GET("/traffic", s.traffic)
+		api.POST("/notifications/test", s.testNotification)
+		api.GET("/errorpages", s.listErrorPages)
+		api.POST("/errorpages/theme", s.applyErrorTheme)
+		api.GET("/errorpages/:code", s.getErrorPage)
+		api.PUT("/errorpages/:code", s.putErrorPage)
 
 		api.POST("/protections/update-crs", s.updateCRS)
 		api.POST("/protections/update-crowdsec", s.updateCrowdSec)
 		api.GET("/protections/status", s.protectionsStatus)
 	}
 
-	if cfg.AutoUpdateProtections {
-		go s.autoUpdateLoop()
-	}
+	go s.autoUpdateLoop()
+	go s.retentionLoop()
 	return r
 }
 
 func (s *Server) autoUpdateLoop() {
-	t := time.NewTicker(time.Duration(s.cfg.AutoUpdateHours) * time.Hour)
+	t := time.NewTicker(time.Hour)
 	defer t.Stop()
+	last := time.Now()
 	for range t.C {
-		_, _ = protections.UpdateCRS(s.cfg.CorazaDir, "")
-		_, _ = protections.UpdateCrowdSecHub(s.cfg.CrowdsecContainer)
+		ops := settings.LoadOps(s.db)
+		if !ops.AutoUpdateEnabled {
+			continue
+		}
+		if ops.AutoUpdateHours < 1 {
+			ops.AutoUpdateHours = s.cfg.AutoUpdateHours
+		}
+		if time.Since(last) < time.Duration(ops.AutoUpdateHours)*time.Hour {
+			continue
+		}
+		last = time.Now()
+		if msg, err := protections.UpdateCRS(s.cfg.CorazaDir, ""); err != nil {
+			notify.NotifyAll(ops, "The Gate auto-update failed", "OWASP CRS: "+err.Error())
+			store.AddAudit(s.db, "system", "auto-update", "coraza", err.Error())
+		} else {
+			store.AddAudit(s.db, "system", "auto-update", "coraza", msg)
+		}
+		if msg, err := protections.UpdateCrowdSecHub(s.cfg.CrowdsecContainer); err != nil {
+			notify.NotifyAll(ops, "The Gate auto-update failed", "CrowdSec Hub: "+err.Error())
+			store.AddAudit(s.db, "system", "auto-update", "crowdsec", err.Error())
+		} else {
+			store.AddAudit(s.db, "system", "auto-update", "crowdsec", msg)
+		}
 		_ = s.resync()
-		store.AddAudit(s.db, "system", "auto-update", "protections", "ok")
+	}
+}
+
+func (s *Server) retentionLoop() {
+	t := time.NewTicker(24 * time.Hour)
+	defer t.Stop()
+	for {
+		ops := settings.LoadOps(s.db)
+		_, _ = retention.PruneLogs(s.cfg.LogDir, ops.LogRetentionDays)
+		_, _ = retention.PruneAudit(s.db, ops.LogRetentionDays)
+		<-t.C
 	}
 }
 
@@ -130,10 +190,10 @@ func (s *Server) health(c *gin.Context) {
 
 func (s *Server) authOptions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"local":           s.cfg.LocalAuthEnabled(),
-		"oidc":            s.cfg.OIDCEnabled(),
-		"auth_mode":       s.cfg.AuthMode,
-		"authentik_apps":  s.cfg.AuthentikForwardURL != "",
+		"local":          s.cfg.LocalAuthEnabled(),
+		"oidc":           s.cfg.OIDCEnabled(),
+		"auth_mode":      s.cfg.AuthMode,
+		"authentik_apps": s.cfg.AuthentikForwardURL != "",
 	})
 }
 
@@ -242,7 +302,8 @@ func (s *Server) resync() error {
 	if err != nil {
 		return err
 	}
-	return s.syncer.SyncApplications(apps)
+	groups, _ := store.ListIPGroups(s.db)
+	return s.syncer.SyncApplications(apps, groups)
 }
 
 func (s *Server) mustResync(c *gin.Context) bool {
@@ -336,6 +397,14 @@ func (s *Server) updateApp(c *gin.Context) {
 	existing.BasicAuthRealm = body.BasicAuthRealm
 	existing.CustomErrors = body.CustomErrors
 	existing.Notes = body.Notes
+	existing.DefenseMode = body.DefenseMode
+	existing.HTTPFlood = body.HTTPFlood
+	existing.BotProtect = body.BotProtect
+	existing.Attacks = body.Attacks
+	existing.AllowGroupID = body.AllowGroupID
+	existing.DenyGroupID = body.DenyGroupID
+	existing.BlockedCountries = body.BlockedCountries
+	existing.ExtraHosts = body.ExtraHosts
 	if body.BasicAuthPass != "" && body.BasicAuthPass != "********" {
 		existing.BasicAuthPass = body.BasicAuthPass
 	}
@@ -444,7 +513,7 @@ func (s *Server) dashboard(c *gin.Context) {
 		"applications_enabled": enabled,
 		"active_decisions":     len(dec),
 		"product":              "The Gate",
-		"version":              "0.2.0",
+		"version":              "0.4.0",
 		"author":               "Carlo Savino",
 		"company":              "Over The Cloud",
 		"website":              "https://overthecloud.it",
@@ -458,8 +527,19 @@ func (s *Server) forceSync(c *gin.Context) {
 	if !s.mustResync(c) {
 		return
 	}
+	apps, _ := store.ListApplications(s.db)
+	written := 0
+	for _, a := range apps {
+		if a.Enabled {
+			written++
+		}
+	}
 	store.AddAudit(s.db, c.GetString("user"), "sync", "traefik", "ok")
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"written": written,
+		"message": fmt.Sprintf("Traefik config synced (%d enabled application(s)).", written),
+	})
 }
 
 func (s *Server) exportApps(c *gin.Context) {
@@ -500,6 +580,14 @@ func (s *Server) importApps(c *gin.Context) {
 			BasicAuthRealm: src.BasicAuthRealm,
 			CustomErrors:   src.CustomErrors,
 			Notes:          src.Notes,
+			DefenseMode:    src.DefenseMode,
+			HTTPFlood:      src.HTTPFlood,
+			BotProtect:     src.BotProtect,
+			Attacks:        src.Attacks,
+			AllowGroupID:   src.AllowGroupID,
+			DenyGroupID:      src.DenyGroupID,
+			BlockedCountries: src.BlockedCountries,
+			ExtraHosts:       src.ExtraHosts,
 		}
 		if a.BasicAuthPass == "********" {
 			a.BasicAuthPass = ""
@@ -538,12 +626,12 @@ func (s *Server) updateCrowdSec(c *gin.Context) {
 
 func (s *Server) protectionsStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"crs_dir":                 s.cfg.CorazaDir,
-		"crowdsec_container":      s.cfg.CrowdsecContainer,
-		"auto_update":             s.cfg.AutoUpdateProtections,
-		"auto_update_hours":       s.cfg.AutoUpdateHours,
-		"authentik_forward_url":   s.cfg.AuthentikForwardURL,
-		"oidc_admin":              s.cfg.OIDCEnabled(),
+		"crs_dir":               s.cfg.CorazaDir,
+		"crowdsec_container":    s.cfg.CrowdsecContainer,
+		"auto_update":           s.cfg.AutoUpdateProtections,
+		"auto_update_hours":     s.cfg.AutoUpdateHours,
+		"authentik_forward_url": s.cfg.AuthentikForwardURL,
+		"oidc_admin":            s.cfg.OIDCEnabled(),
 	})
 }
 
