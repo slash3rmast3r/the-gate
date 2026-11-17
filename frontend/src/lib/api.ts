@@ -24,6 +24,12 @@ export type Application = {
   deny_group_id: string;
   blocked_countries: string;
   extra_hosts: string;
+  antibot_mode: string;
+  dnsbl_enabled: boolean;
+  www_redirect: string;
+  request_headers: string;
+  response_headers: string;
+  websocket_sticky: boolean;
   created_at?: string;
   updated_at?: string;
 };
@@ -75,6 +81,14 @@ export type OpsSettings = {
   error_theme?: string;
   telegram: { enabled: boolean; bot_token: string; chat_id: string };
   smtp: { enabled: boolean; host: string; port: number; user: string; password: string; from: string; to: string };
+  bad_behavior: {
+    enabled: boolean;
+    threshold: number;
+    window_sec: number;
+    min_status: number;
+    ban_duration: string;
+  };
+  dnsbl_zones: string;
 };
 
 export type ErrorTheme = {

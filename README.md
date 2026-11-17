@@ -20,7 +20,10 @@ The Gate is **not** a binary fork of SafeLine. It orchestrates open components (
 - **CrowdSec** — decisions + AppSec (with Hub updates)
 - **Coraza + OWASP CRS** — WAF ruleset
 - **Security rules** — Cloudflare-style conditions (per-app or global)
+- **Antibot JS challenge**, **DNSBL**, **bad-behavior auto-ban** (CrowdSec)
+- **WWW redirect**, custom request/response headers, WebSocket sticky cookie
 - **Allow / Deny** IP groups, traffic view, decisions, audit, certificates UI
+- **Bulk actions** on selected applications
 - **i18n** EN/IT, panel themes, custom error pages
 
 ```text

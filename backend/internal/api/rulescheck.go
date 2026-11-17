@@ -94,6 +94,17 @@ func hostMatchesApp(a models.Application, host string) bool {
 			return true
 		}
 	}
+	// www redirect pair (service may run on apex or www while Host field is the other)
+	mode := strings.ToLower(strings.TrimSpace(a.WWWRedirect))
+	if mode == "force_www" || mode == "force_apex" {
+		h := strings.ToLower(strings.TrimSpace(a.Host))
+		if strings.HasPrefix(h, "www.") && strings.TrimPrefix(h, "www.") == host {
+			return true
+		}
+		if !strings.HasPrefix(h, "www.") && ("www."+h) == host {
+			return true
+		}
+	}
 	return false
 }
 

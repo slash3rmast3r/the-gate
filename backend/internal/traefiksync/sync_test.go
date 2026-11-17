@@ -18,3 +18,21 @@ func TestParseCIDRs(t *testing.T) {
 		t.Fatal("empty should be nil")
 	}
 }
+
+func TestWWWPlan(t *testing.T) {
+	hosts, from, to := wwwPlan("example.com", "force_www")
+	if len(hosts) != 1 || hosts[0] != "www.example.com" || from != "example.com" || to != "www.example.com" {
+		t.Fatalf("force_www: %#v %q %q", hosts, from, to)
+	}
+	hosts, from, to = wwwPlan("www.example.com", "force_apex")
+	if len(hosts) != 1 || hosts[0] != "example.com" || from != "www.example.com" || to != "example.com" {
+		t.Fatalf("force_apex: %#v %q %q", hosts, from, to)
+	}
+}
+
+func TestParseHeaderMap(t *testing.T) {
+	m := parseHeaderMap("X-A: 1\n# comment\nX-B: two")
+	if m["X-A"] != "1" || m["X-B"] != "two" {
+		t.Fatalf("%#v", m)
+	}
+}

@@ -18,6 +18,8 @@ const (
 	KeyErrorTheme        = "error_theme"
 	KeyNotifyTelegram    = "notify_telegram"
 	KeyNotifySMTP        = "notify_smtp"
+	KeyBadBehavior       = "bad_behavior"
+	KeyDNSBLZones        = "dnsbl_zones"
 )
 
 type TelegramConfig struct {
@@ -36,6 +38,14 @@ type SMTPConfig struct {
 	To       string `json:"to"`
 }
 
+type BadBehaviorConfig struct {
+	Enabled     bool   `json:"enabled"`
+	Threshold   int    `json:"threshold"`    // errors per IP in window
+	WindowSec   int    `json:"window_sec"`   // lookback window
+	MinStatus   int    `json:"min_status"`   // count statuses >= this (default 400)
+	BanDuration string `json:"ban_duration"` // CrowdSec duration e.g. 4h
+}
+
 type OpsConfig struct {
 	AutoUpdateEnabled bool   `json:"auto_update_enabled"`
 	AutoUpdateHours   int    `json:"auto_update_hours"`
@@ -44,6 +54,8 @@ type OpsConfig struct {
 	ErrorTheme        string         `json:"error_theme"`
 	Telegram          TelegramConfig `json:"telegram"`
 	SMTP              SMTPConfig     `json:"smtp"`
+	BadBehavior       BadBehaviorConfig `json:"bad_behavior"`
+	DNSBLZones        string            `json:"dnsbl_zones"` // CSV of DNSBL zones
 }
 
 func Get(db *gorm.DB, key, def string) string {
@@ -113,6 +125,15 @@ func EnsureDefaults(db *gorm.DB, autoEnabled bool, autoHours, retentionDays int)
 		b, _ := json.Marshal(SMTPConfig{Port: 587})
 		_ = Set(db, KeyNotifySMTP, string(b))
 	}
+	if Get(db, KeyBadBehavior, "") == "" {
+		b, _ := json.Marshal(BadBehaviorConfig{
+			Enabled: false, Threshold: 30, WindowSec: 60, MinStatus: 400, BanDuration: "4h",
+		})
+		_ = Set(db, KeyBadBehavior, string(b))
+	}
+	if Get(db, KeyDNSBLZones, "") == "" {
+		_ = Set(db, KeyDNSBLZones, "dnsbl.sorbs.net,bl.spamcop.net")
+	}
 	return nil
 }
 
@@ -121,6 +142,20 @@ func LoadOps(db *gorm.DB) OpsConfig {
 	_ = json.Unmarshal([]byte(Get(db, KeyNotifyTelegram, "{}")), &tg)
 	smtp := SMTPConfig{Port: 587}
 	_ = json.Unmarshal([]byte(Get(db, KeyNotifySMTP, "{}")), &smtp)
+	bb := BadBehaviorConfig{Enabled: false, Threshold: 30, WindowSec: 60, MinStatus: 400, BanDuration: "4h"}
+	_ = json.Unmarshal([]byte(Get(db, KeyBadBehavior, "{}")), &bb)
+	if bb.Threshold < 1 {
+		bb.Threshold = 30
+	}
+	if bb.WindowSec < 10 {
+		bb.WindowSec = 60
+	}
+	if bb.MinStatus < 400 {
+		bb.MinStatus = 400
+	}
+	if strings.TrimSpace(bb.BanDuration) == "" {
+		bb.BanDuration = "4h"
+	}
 	return OpsConfig{
 		AutoUpdateEnabled: GetBool(db, KeyAutoUpdateEnabled, false),
 		AutoUpdateHours:   GetInt(db, KeyAutoUpdateHours, 24),
@@ -129,6 +164,8 @@ func LoadOps(db *gorm.DB) OpsConfig {
 		ErrorTheme:        Get(db, KeyErrorTheme, "forest"),
 		Telegram:          tg,
 		SMTP:              smtp,
+		BadBehavior:       bb,
+		DNSBLZones:        Get(db, KeyDNSBLZones, "dnsbl.sorbs.net,bl.spamcop.net"),
 	}
 }
 
@@ -168,7 +205,30 @@ func SaveOps(db *gorm.DB, ops OpsConfig, keepTelegramToken, keepSMTPPassword str
 		return err
 	}
 	sm, _ := json.Marshal(ops.SMTP)
-	return Set(db, KeyNotifySMTP, string(sm))
+	if err := Set(db, KeyNotifySMTP, string(sm)); err != nil {
+		return err
+	}
+	if ops.BadBehavior.Threshold < 1 {
+		ops.BadBehavior.Threshold = 30
+	}
+	if ops.BadBehavior.WindowSec < 10 {
+		ops.BadBehavior.WindowSec = 60
+	}
+	if ops.BadBehavior.MinStatus < 400 {
+		ops.BadBehavior.MinStatus = 400
+	}
+	if strings.TrimSpace(ops.BadBehavior.BanDuration) == "" {
+		ops.BadBehavior.BanDuration = "4h"
+	}
+	bb, _ := json.Marshal(ops.BadBehavior)
+	if err := Set(db, KeyBadBehavior, string(bb)); err != nil {
+		return err
+	}
+	zones := strings.TrimSpace(ops.DNSBLZones)
+	if zones == "" {
+		zones = "dnsbl.sorbs.net,bl.spamcop.net"
+	}
+	return Set(db, KeyDNSBLZones, zones)
 }
 
 func RedactOps(ops OpsConfig) OpsConfig {

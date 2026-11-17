@@ -80,6 +80,10 @@ func NewRouter(cfg config.Config, db *gorm.DB, syncer *traefiksync.Syncer) *gin.
 	r.HEAD("/internal/geo-check", s.geoCheck)
 	r.GET("/internal/rules-check", s.rulesCheck)
 	r.HEAD("/internal/rules-check", s.rulesCheck)
+	r.GET("/internal/antibot-check", s.antibotCheck)
+	r.HEAD("/internal/antibot-check", s.antibotCheck)
+	r.GET("/internal/dnsbl-check", s.dnsblCheck)
+	r.HEAD("/internal/dnsbl-check", s.dnsblCheck)
 
 	r.POST("/api/login", s.login)
 	r.POST("/api/logout", s.logout)
@@ -134,6 +138,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, syncer *traefiksync.Syncer) *gin.
 
 	go s.autoUpdateLoop()
 	go s.retentionLoop()
+	go s.badBehaviorLoop()
 	return r
 }
 
@@ -406,6 +411,12 @@ func (s *Server) updateApp(c *gin.Context) {
 	existing.DenyGroupID = body.DenyGroupID
 	existing.BlockedCountries = body.BlockedCountries
 	existing.ExtraHosts = body.ExtraHosts
+	existing.AntibotMode = body.AntibotMode
+	existing.DNSBLEnabled = body.DNSBLEnabled
+	existing.WWWRedirect = body.WWWRedirect
+	existing.RequestHeaders = body.RequestHeaders
+	existing.ResponseHeaders = body.ResponseHeaders
+	existing.WebsocketSticky = body.WebsocketSticky
 	if body.BasicAuthPass != "" && body.BasicAuthPass != "********" {
 		existing.BasicAuthPass = body.BasicAuthPass
 	}
@@ -589,6 +600,12 @@ func (s *Server) importApps(c *gin.Context) {
 			DenyGroupID:      src.DenyGroupID,
 			BlockedCountries: src.BlockedCountries,
 			ExtraHosts:       src.ExtraHosts,
+			AntibotMode:      src.AntibotMode,
+			DNSBLEnabled:     src.DNSBLEnabled,
+			WWWRedirect:      src.WWWRedirect,
+			RequestHeaders:   src.RequestHeaders,
+			ResponseHeaders:  src.ResponseHeaders,
+			WebsocketSticky:  src.WebsocketSticky,
 		}
 		if a.BasicAuthPass == "********" {
 			a.BasicAuthPass = ""

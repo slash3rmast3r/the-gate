@@ -76,6 +76,8 @@ func (s *Syncer) writeApp(a models.Application, groups map[string]models.IPGroup
 	name := routerName(a)
 	allowName := name + "-allowlist"
 	basicName := name + "-basicauth"
+	headersName := name + "-headers"
+	redirName := name + "-wwwredir"
 	localMW := map[string]any{}
 
 	cidrs := parseCIDRs(a.AllowCIDRs)
@@ -85,7 +87,7 @@ func (s *Syncer) writeApp(a models.Application, groups map[string]models.IPGroup
 		}
 	}
 
-	mws := middlewaresFor(a, allowName, basicName, len(cidrs) > 0)
+	mws := middlewaresFor(a, allowName, basicName, headersName, len(cidrs) > 0)
 
 	if len(cidrs) > 0 {
 		localMW[allowName] = map[string]any{
@@ -109,17 +111,29 @@ func (s *Syncer) writeApp(a models.Application, groups map[string]models.IPGroup
 			},
 		}
 	}
+	if reqH, resH := parseHeaderMap(a.RequestHeaders), parseHeaderMap(a.ResponseHeaders); len(reqH) > 0 || len(resH) > 0 {
+		hdr := map[string]any{}
+		if len(reqH) > 0 {
+			hdr["customRequestHeaders"] = reqH
+		}
+		if len(resH) > 0 {
+			hdr["customResponseHeaders"] = resH
+		}
+		localMW[headersName] = map[string]any{"headers": hdr}
+		mws = appendUnique(mws, headersName+"@file")
+	}
 
-	hosts := []string{a.Host}
+	serviceHosts, redirectFrom, redirectTo := wwwPlan(a.Host, a.WWWRedirect)
 	for _, h := range parseCIDRs(a.ExtraHosts) {
 		h = strings.ToLower(strings.TrimSpace(h))
-		if h == "" || strings.EqualFold(h, a.Host) {
+		if h == "" {
 			continue
 		}
-		hosts = append(hosts, h)
+		serviceHosts = appendUnique(serviceHosts, h)
 	}
-	hostRules := make([]string, 0, len(hosts))
-	for _, h := range hosts {
+
+	hostRules := make([]string, 0, len(serviceHosts))
+	for _, h := range serviceHosts {
 		hostRules = append(hostRules, fmt.Sprintf("Host(`%s`)", h))
 	}
 	rule := strings.Join(hostRules, " || ")
@@ -143,17 +157,50 @@ func (s *Syncer) writeApp(a models.Application, groups map[string]models.IPGroup
 		router["tls"] = map[string]any{}
 	}
 
-	httpBlock := map[string]any{
-		"routers": map[string]any{name: router},
-		"services": map[string]any{
-			name: map[string]any{
-				"loadBalancer": map[string]any{
-					"servers": []map[string]string{
-						{"url": a.UpstreamURL},
-					},
-					"passHostHeader": true,
-				},
+	routers := map[string]any{name: router}
+	if redirectFrom != "" && redirectTo != "" {
+		localMW[redirName] = map[string]any{
+			"redirectRegex": map[string]any{
+				"regex":       "^https?://[^/]+(.*)$",
+				"replacement": "https://" + redirectTo + "${1}",
+				"permanent":   true,
 			},
+		}
+		redirRouter := map[string]any{
+			"rule":        fmt.Sprintf("Host(`%s`)", redirectFrom),
+			"entryPoints": []string{"websecure"},
+			"middlewares": []string{redirName + "@file"},
+			"service":     name, // unused after redirect, but required by Traefik
+		}
+		if a.TLSEnabled {
+			redirRouter["tls"] = map[string]any{"certResolver": "le"}
+		} else {
+			redirRouter["tls"] = map[string]any{}
+		}
+		routers[name+"-wwwredir"] = redirRouter
+	}
+
+	lb := map[string]any{
+		"servers": []map[string]string{
+			{"url": a.UpstreamURL},
+		},
+		"passHostHeader": true,
+	}
+	if a.WebsocketSticky {
+		lb["sticky"] = map[string]any{
+			"cookie": map[string]any{
+				"name":     "gate_ws",
+				"httpOnly": true,
+				"secure":   true,
+				"sameSite": "lax",
+			},
+		}
+	}
+
+	httpBlock := map[string]any{
+		"routers": routers,
+		"services": map[string]any{
+			name: map[string]any{"loadBalancer": lb},
 		},
 	}
 	if len(localMW) > 0 {
@@ -168,7 +215,7 @@ func (s *Syncer) writeApp(a models.Application, groups map[string]models.IPGroup
 	return os.WriteFile(filepath.Join(s.dir, name+".yml"), b, 0o644)
 }
 
-func middlewaresFor(a models.Application, allowName, basicName string, hasAllowlist ...bool) []string {
+func middlewaresFor(a models.Application, allowName, basicName, headersName string, hasAllowlist ...bool) []string {
 	var mws []string
 	allowlist := parseCIDRs(a.AllowCIDRs) != nil
 	if len(hasAllowlist) > 0 {
@@ -184,6 +231,12 @@ func middlewaresFor(a models.Application, allowName, basicName string, hasAllowl
 		}
 	case "authentik", "forward-auth", "sso":
 		mws = append(mws, "authentik-forward@file")
+	}
+	if strings.EqualFold(strings.TrimSpace(a.AntibotMode), "js") {
+		mws = appendUnique(mws, "gate-antibot@file")
+	}
+	if a.DNSBLEnabled {
+		mws = appendUnique(mws, "gate-dnsbl@file")
 	}
 
 	mode := strings.ToLower(a.DefenseMode)
@@ -268,6 +321,68 @@ func parseCIDRs(raw string) []string {
 	return out
 }
 
+func parseHeaderMap(raw string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		idx := strings.Index(line, ":")
+		if idx <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(line[:idx])
+		v := strings.TrimSpace(line[idx+1:])
+		if k != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// wwwPlan returns service hosts plus optional redirect source/target.
+func wwwPlan(host, mode string) (serviceHosts []string, redirectFrom, redirectTo string) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	serviceHosts = []string{host}
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	apex, www := apexAndWWW(host)
+	if apex == "" || www == "" {
+		return serviceHosts, "", ""
+	}
+	switch mode {
+	case "force_www":
+		serviceHosts = []string{www}
+		if host != www {
+			// configured as apex → redirect apex to www
+			redirectFrom, redirectTo = apex, www
+		} else {
+			redirectFrom, redirectTo = apex, www
+		}
+	case "force_apex":
+		serviceHosts = []string{apex}
+		redirectFrom, redirectTo = www, apex
+	}
+	return serviceHosts, redirectFrom, redirectTo
+}
+
+func apexAndWWW(host string) (apex, www string) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return "", ""
+	}
+	if strings.HasPrefix(host, "www.") {
+		apex = strings.TrimPrefix(host, "www.")
+		www = host
+		return apex, www
+	}
+	// single-label hosts cannot form www pair usefully
+	if !strings.Contains(host, ".") {
+		return host, ""
+	}
+	return host, "www." + host
+}
+
 func sanitize(host string) string {
 	h := strings.ToLower(host)
 	h = strings.ReplaceAll(h, ".", "-")
@@ -314,6 +429,14 @@ http:
     gate-geocheck:
       forwardAuth:
         address: "http://gate-api:8080/internal/geo-check"
+        trustForwardHeader: true
+    gate-antibot:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/antibot-check"
+        trustForwardHeader: true
+    gate-dnsbl:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/dnsbl-check"
         trustForwardHeader: true
     gate-rules:
       forwardAuth:

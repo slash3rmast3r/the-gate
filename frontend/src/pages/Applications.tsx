@@ -28,6 +28,12 @@ const empty: Partial<Application> = {
   deny_group_id: "",
   blocked_countries: "",
   extra_hosts: "",
+  antibot_mode: "off",
+  dnsbl_enabled: false,
+  www_redirect: "off",
+  request_headers: "",
+  response_headers: "",
+  websocket_sticky: false,
 };
 
 export default function Applications() {
@@ -56,6 +62,9 @@ export default function Applications() {
     tls_enabled: "",
     custom_errors: "",
     enabled: "",
+    antibot_mode: "",
+    dnsbl_enabled: "",
+    www_redirect: "",
     apply_countries: false,
     blocked_countries: "",
   });
@@ -95,6 +104,9 @@ export default function Applications() {
     if (bulk.tls_enabled === "true" || bulk.tls_enabled === "false") set.tls_enabled = bulk.tls_enabled === "true";
     if (bulk.custom_errors === "true" || bulk.custom_errors === "false") set.custom_errors = bulk.custom_errors === "true";
     if (bulk.enabled === "true" || bulk.enabled === "false") set.enabled = bulk.enabled === "true";
+    if (bulk.antibot_mode) set.antibot_mode = bulk.antibot_mode;
+    if (bulk.dnsbl_enabled === "true" || bulk.dnsbl_enabled === "false") set.dnsbl_enabled = bulk.dnsbl_enabled === "true";
+    if (bulk.www_redirect) set.www_redirect = bulk.www_redirect;
     if (bulk.apply_countries) set.blocked_countries = bulk.blocked_countries || "";
 
     if (Object.keys(set).length === 0) {
@@ -312,6 +324,55 @@ export default function Applications() {
               placeholder={t("applications.extraHostsHint")}
               value={form.extra_hosts || ""}
               onChange={(e) => setForm({ ...form, extra_hosts: e.target.value.toLowerCase() })}
+            />
+          </label>
+          <label>
+            {t("applications.antibot")}
+            <select value={form.antibot_mode || "off"} onChange={(e) => setForm({ ...form, antibot_mode: e.target.value })}>
+              <option value="off">{t("applications.antibotOff")}</option>
+              <option value="js">{t("applications.antibotJs")}</option>
+            </select>
+          </label>
+          <label>
+            {t("applications.wwwRedirect")}
+            <select value={form.www_redirect || "off"} onChange={(e) => setForm({ ...form, www_redirect: e.target.value })}>
+              <option value="off">{t("applications.wwwOff")}</option>
+              <option value="force_www">{t("applications.wwwForceWww")}</option>
+              <option value="force_apex">{t("applications.wwwForceApex")}</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!form.dnsbl_enabled}
+              onChange={(e) => setForm({ ...form, dnsbl_enabled: e.target.checked })}
+            />
+            {t("applications.dnsbl")}
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!form.websocket_sticky}
+              onChange={(e) => setForm({ ...form, websocket_sticky: e.target.checked })}
+            />
+            {t("applications.websocketSticky")}
+          </label>
+          <label>
+            {t("applications.requestHeaders")}
+            <textarea
+              rows={3}
+              placeholder={"X-Custom-Header: value"}
+              value={form.request_headers || ""}
+              onChange={(e) => setForm({ ...form, request_headers: e.target.value })}
+            />
+          </label>
+          <label>
+            {t("applications.responseHeaders")}
+            <textarea
+              rows={3}
+              placeholder={"X-Frame-Options: SAMEORIGIN"}
+              value={form.response_headers || ""}
+              onChange={(e) => setForm({ ...form, response_headers: e.target.value })}
             />
           </label>
           <div className="panel" style={{ boxShadow: "none", display: "grid", gap: 10 }}>
@@ -534,6 +595,40 @@ export default function Applications() {
                   <option value="">{t("applications.bulkUnchanged")}</option>
                   <option value="true">{t("applications.bulkOn")}</option>
                   <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.antibot")}
+                <select
+                  value={(bulk as any).antibot_mode || ""}
+                  onChange={(e) => setBulk({ ...bulk, antibot_mode: e.target.value } as any)}
+                >
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="off">{t("applications.antibotOff")}</option>
+                  <option value="js">{t("applications.antibotJs")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.dnsbl")}
+                <select
+                  value={(bulk as any).dnsbl_enabled || ""}
+                  onChange={(e) => setBulk({ ...bulk, dnsbl_enabled: e.target.value } as any)}
+                >
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="true">{t("applications.bulkOn")}</option>
+                  <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.wwwRedirect")}
+                <select
+                  value={(bulk as any).www_redirect || ""}
+                  onChange={(e) => setBulk({ ...bulk, www_redirect: e.target.value } as any)}
+                >
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="off">{t("applications.wwwOff")}</option>
+                  <option value="force_www">{t("applications.wwwForceWww")}</option>
+                  <option value="force_apex">{t("applications.wwwForceApex")}</option>
                 </select>
               </label>
               <div style={{ gridColumn: "1 / -1" }}>

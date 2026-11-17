@@ -52,6 +52,16 @@ http:
         address: "http://gate-api:8080/internal/geo-check"
         trustForwardHeader: true
 
+    gate-antibot:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/antibot-check"
+        trustForwardHeader: true
+
+    gate-dnsbl:
+      forwardAuth:
+        address: "http://gate-api:8080/internal/dnsbl-check"
+        trustForwardHeader: true
+
     gate-rules:
       forwardAuth:
         address: "http://gate-api:8080/internal/rules-check"

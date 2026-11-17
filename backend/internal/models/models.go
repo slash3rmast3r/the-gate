@@ -52,6 +52,14 @@ type Application struct {
 	BlockedCountries string `gorm:"size:512" json:"blocked_countries"` // ISO codes CSV e.g. CN,RU,KP
 	ExtraHosts       string `gorm:"size:1024" json:"extra_hosts"`       // extra FQDNs for LE SAN / routing (CSV)
 
+	// Edge extras (BunkerWeb-inspired, Traefik-native)
+	AntibotMode      string `gorm:"size:16;default:off" json:"antibot_mode"` // off | js
+	DNSBLEnabled     bool   `gorm:"default:false" json:"dnsbl_enabled"`
+	WWWRedirect      string `gorm:"size:16;default:off" json:"www_redirect"` // off | force_www | force_apex
+	RequestHeaders   string `gorm:"type:text" json:"request_headers"`         // lines "Header: value"
+	ResponseHeaders  string `gorm:"type:text" json:"response_headers"`
+	WebsocketSticky  bool   `gorm:"default:false" json:"websocket_sticky"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

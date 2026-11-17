@@ -150,6 +150,34 @@ func applyBulkSet(app *models.Application, set map[string]interface{}) error {
 				return fmt.Errorf("enabled must be boolean")
 			}
 			app.Enabled = b
+		case "antibot_mode":
+			v := strings.ToLower(asString(raw))
+			switch v {
+			case "off", "js":
+				app.AntibotMode = v
+			default:
+				return fmt.Errorf("invalid antibot_mode")
+			}
+		case "dnsbl_enabled":
+			b, ok := asBool(raw)
+			if !ok {
+				return fmt.Errorf("dnsbl_enabled must be boolean")
+			}
+			app.DNSBLEnabled = b
+		case "www_redirect":
+			v := strings.ToLower(asString(raw))
+			switch v {
+			case "off", "force_www", "force_apex":
+				app.WWWRedirect = v
+			default:
+				return fmt.Errorf("invalid www_redirect")
+			}
+		case "websocket_sticky":
+			b, ok := asBool(raw)
+			if !ok {
+				return fmt.Errorf("websocket_sticky must be boolean")
+			}
+			app.WebsocketSticky = b
 		default:
 			return fmt.Errorf("unsupported bulk field: %s", key)
 		}

@@ -13,6 +13,8 @@ const defaults: OpsSettings = {
   error_theme: "forest",
   telegram: { enabled: false, bot_token: "", chat_id: "" },
   smtp: { enabled: false, host: "", port: 587, user: "", password: "", from: "", to: "" },
+  bad_behavior: { enabled: false, threshold: 30, window_sec: 60, min_status: 400, ban_duration: "4h" },
+  dnsbl_zones: "dnsbl.sorbs.net,bl.spamcop.net",
 };
 
 export default function Settings() {
@@ -47,7 +49,13 @@ export default function Settings() {
       setHealth(h);
       setDash(d);
       setProt(p);
-      setOps({ ...s, error_theme: s.error_theme || "forest" });
+      setOps({
+        ...defaults,
+        ...s,
+        error_theme: s.error_theme || "forest",
+        bad_behavior: { ...defaults.bad_behavior, ...(s.bad_behavior || {}) },
+        dnsbl_zones: s.dnsbl_zones || defaults.dnsbl_zones,
+      });
       setCodes(ep.codes || []);
       setPages(ep.pages || {});
       setThemes(ep.themes || []);
@@ -95,6 +103,62 @@ export default function Settings() {
         <label>{t("settings.errorTip")}<input value={ops.error_tip_message || ""} onChange={(e) => setOps({ ...ops, error_tip_message: e.target.value })} /></label>
         <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>{t("settings.errorTipHelp")}</p>
         <button className="btn primary" disabled={busy === "settings"} onClick={saveSettings}>{busy === "settings" ? t("settings.saving") : t("settings.saveSettings")}</button>
+      </div>
+
+      <div className="panel form" style={{ maxWidth: 820, marginBottom: 18 }}>
+        <h3 style={{ margin: 0 }}>{t("settings.badBehavior")}</h3>
+        <p style={{ margin: 0, color: "var(--muted)" }}>{t("settings.badBehaviorHelp")}</p>
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={!!ops.bad_behavior?.enabled}
+            onChange={(e) => setOps({ ...ops, bad_behavior: { ...ops.bad_behavior, enabled: e.target.checked } })}
+          />
+          {t("settings.badBehaviorEnable")}
+        </label>
+        <label>
+          {t("settings.badBehaviorThreshold")}
+          <input
+            type="number"
+            min={5}
+            value={ops.bad_behavior?.threshold ?? 30}
+            onChange={(e) => setOps({ ...ops, bad_behavior: { ...ops.bad_behavior, threshold: Number(e.target.value) } })}
+          />
+        </label>
+        <label>
+          {t("settings.badBehaviorWindow")}
+          <input
+            type="number"
+            min={10}
+            value={ops.bad_behavior?.window_sec ?? 60}
+            onChange={(e) => setOps({ ...ops, bad_behavior: { ...ops.bad_behavior, window_sec: Number(e.target.value) } })}
+          />
+        </label>
+        <label>
+          {t("settings.badBehaviorMinStatus")}
+          <input
+            type="number"
+            min={400}
+            max={599}
+            value={ops.bad_behavior?.min_status ?? 400}
+            onChange={(e) => setOps({ ...ops, bad_behavior: { ...ops.bad_behavior, min_status: Number(e.target.value) } })}
+          />
+        </label>
+        <label>
+          {t("settings.badBehaviorBan")}
+          <input
+            value={ops.bad_behavior?.ban_duration || "4h"}
+            onChange={(e) => setOps({ ...ops, bad_behavior: { ...ops.bad_behavior, ban_duration: e.target.value } })}
+          />
+        </label>
+        <label>
+          {t("settings.dnsblZones")}
+          <input value={ops.dnsbl_zones || ""} onChange={(e) => setOps({ ...ops, dnsbl_zones: e.target.value })} />
+        </label>
+        <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>{t("settings.dnsblZonesHelp")}</p>
+        <button className="btn primary" disabled={busy === "settings"} onClick={saveSettings}>
+          {busy === "settings" ? t("settings.saving") : t("settings.saveSettings")}
+        </button>
       </div>
 
       <div className="panel" style={{ display: "grid", gap: 14, maxWidth: 820, marginBottom: 18 }}>
