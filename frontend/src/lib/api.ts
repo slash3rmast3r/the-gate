@@ -147,6 +147,11 @@ export const api = {
   updateApp: (id: string, body: Partial<Application>) =>
     req<Application>(`/api/applications/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteApp: (id: string) => req(`/api/applications/${id}`, { method: "DELETE" }),
+  bulkUpdateApps: (ids: string[], set: Record<string, unknown>) =>
+    req<{ ok: boolean; updated: number; ids: string[] }>("/api/applications/bulk", {
+      method: "POST",
+      body: JSON.stringify({ ids, set }),
+    }),
   toggleApp: (id: string) => req<Application>(`/api/applications/${id}/toggle`, { method: "POST" }),
   setDefenseMode: (id: string, mode: "normal" | "audit" | "under_attack") =>
     req<Application>(`/api/applications/${id}/defense`, { method: "POST", body: JSON.stringify({ mode }) }),

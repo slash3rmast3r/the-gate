@@ -41,12 +41,81 @@ export default function Applications() {
   const [ok, setOk] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulk, setBulk] = useState({
+    allow_group_id: "",
+    deny_group_id: "",
+    auth_mode: "",
+    rate_limit: "",
+    waf_mode: "",
+    defense_mode: "",
+    http_flood: "",
+    bot_protect: "",
+    attacks: "",
+    tls_enabled: "",
+    custom_errors: "",
+    enabled: "",
+    apply_countries: false,
+    blocked_countries: "",
+  });
 
   async function load() {
     const [list, dash, ipGroups] = await Promise.all([api.listApps(), api.dashboard(), api.ipGroups()]);
     setApps(list);
     setStats(dash);
     setGroups(ipGroups);
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function selectAll() {
+    setSelected(apps.map((a) => a.id));
+  }
+
+  function selectNone() {
+    setSelected([]);
+  }
+
+  async function applyBulk() {
+    setError("");
+    setOk("");
+    const set: Record<string, unknown> = {};
+    if (bulk.allow_group_id !== "") set.allow_group_id = bulk.allow_group_id === "__clear__" ? "" : bulk.allow_group_id;
+    if (bulk.deny_group_id !== "") set.deny_group_id = bulk.deny_group_id === "__clear__" ? "" : bulk.deny_group_id;
+    if (bulk.auth_mode) set.auth_mode = bulk.auth_mode;
+    if (bulk.rate_limit) set.rate_limit = bulk.rate_limit;
+    if (bulk.waf_mode) set.waf_mode = bulk.waf_mode;
+    if (bulk.defense_mode) set.defense_mode = bulk.defense_mode;
+    if (bulk.http_flood === "true" || bulk.http_flood === "false") set.http_flood = bulk.http_flood === "true";
+    if (bulk.bot_protect === "true" || bulk.bot_protect === "false") set.bot_protect = bulk.bot_protect === "true";
+    if (bulk.attacks === "true" || bulk.attacks === "false") set.attacks = bulk.attacks === "true";
+    if (bulk.tls_enabled === "true" || bulk.tls_enabled === "false") set.tls_enabled = bulk.tls_enabled === "true";
+    if (bulk.custom_errors === "true" || bulk.custom_errors === "false") set.custom_errors = bulk.custom_errors === "true";
+    if (bulk.enabled === "true" || bulk.enabled === "false") set.enabled = bulk.enabled === "true";
+    if (bulk.apply_countries) set.blocked_countries = bulk.blocked_countries || "";
+
+    if (Object.keys(set).length === 0) {
+      setError(t("applications.bulkNothing"));
+      return;
+    }
+    if (selected.length === 0) {
+      setError(t("applications.bulkNoSelection"));
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await api.bulkUpdateApps(selected, set);
+      setOk(`${t("applications.bulkOk")} (${res.updated})`);
+      setSelected([]);
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBulkBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -343,14 +412,167 @@ export default function Applications() {
         </form>
       )}
 
+      {!showForm && apps.length > 0 && (
+        <div className="panel bulk-bar" style={{ marginBottom: 16, maxWidth: "none" }}>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <strong>{t("applications.bulkTitle")}</strong>
+            <div className="row">
+              <button type="button" className="btn" onClick={selectAll}>
+                {t("applications.selectAll")}
+              </button>
+              <button type="button" className="btn" onClick={selectNone}>
+                {t("applications.selectNone")}
+              </button>
+              <span className="meta">
+                {selected.length} {t("applications.selected")}
+              </span>
+            </div>
+          </div>
+          <p style={{ margin: "8px 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{t("applications.bulkHelp")}</p>
+          {selected.length > 0 && (
+            <div className="bulk-grid" style={{ marginTop: 14 }}>
+              <label>
+                {t("applications.allowGroup")}
+                <select value={bulk.allow_group_id} onChange={(e) => setBulk({ ...bulk, allow_group_id: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="__clear__">{t("applications.bulkClearGroup")}</option>
+                  {groups.filter((g) => g.kind === "allow").map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("applications.denyGroup")}
+                <select value={bulk.deny_group_id} onChange={(e) => setBulk({ ...bulk, deny_group_id: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="__clear__">{t("applications.bulkClearGroup")}</option>
+                  {groups.filter((g) => g.kind === "deny").map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("applications.accessAuth")}
+                <select value={bulk.auth_mode} onChange={(e) => setBulk({ ...bulk, auth_mode: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="none">{t("applications.auth.none")}</option>
+                  <option value="authentik">{t("applications.auth.authentik")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.rateLimit")}
+                <select value={bulk.rate_limit} onChange={(e) => setBulk({ ...bulk, rate_limit: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="soft">{t("applications.rate.soft")}</option>
+                  <option value="strict">{t("applications.rate.strict")}</option>
+                  <option value="dos">{t("applications.rate.dos")}</option>
+                  <option value="off">{t("applications.rate.off")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.wafMode")}
+                <select value={bulk.waf_mode} onChange={(e) => setBulk({ ...bulk, waf_mode: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="full">{t("applications.waf.full")}</option>
+                  <option value="light">{t("applications.waf.light")}</option>
+                  <option value="crowdsec-only">{t("applications.waf.crowdsecOnly")}</option>
+                  <option value="off">{t("applications.waf.off")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.bulkDefenseMode")}
+                <select value={bulk.defense_mode} onChange={(e) => setBulk({ ...bulk, defense_mode: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="normal">{t("applications.defense.normal")}</option>
+                  <option value="audit">{t("applications.defense.audit")}</option>
+                  <option value="under_attack">{t("applications.defense.underAttack")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.httpFloodProtection")}
+                <select value={bulk.http_flood} onChange={(e) => setBulk({ ...bulk, http_flood: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="true">{t("applications.bulkOn")}</option>
+                  <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.botProtection")}
+                <select value={bulk.bot_protect} onChange={(e) => setBulk({ ...bulk, bot_protect: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="true">{t("applications.bulkOn")}</option>
+                  <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.applicationAttacks")}
+                <select value={bulk.attacks} onChange={(e) => setBulk({ ...bulk, attacks: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="true">{t("applications.bulkOn")}</option>
+                  <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.letsEncryptTls")}
+                <select value={bulk.tls_enabled} onChange={(e) => setBulk({ ...bulk, tls_enabled: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="true">{t("applications.bulkOn")}</option>
+                  <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.customErrors")}
+                <select value={bulk.custom_errors} onChange={(e) => setBulk({ ...bulk, custom_errors: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="true">{t("applications.bulkOn")}</option>
+                  <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <label>
+                {t("applications.enabled")}
+                <select value={bulk.enabled} onChange={(e) => setBulk({ ...bulk, enabled: e.target.value })}>
+                  <option value="">{t("applications.bulkUnchanged")}</option>
+                  <option value="true">{t("applications.bulkOn")}</option>
+                  <option value="false">{t("applications.bulkOff")}</option>
+                </select>
+              </label>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={bulk.apply_countries}
+                    onChange={(e) => setBulk({ ...bulk, apply_countries: e.target.checked })}
+                  />
+                  {t("applications.bulkApplyCountries")}
+                </label>
+                {bulk.apply_countries && (
+                  <CountryPicker
+                    value={bulk.blocked_countries}
+                    onChange={(csv) => setBulk({ ...bulk, blocked_countries: csv })}
+                  />
+                )}
+              </div>
+              <div className="row" style={{ gridColumn: "1 / -1" }}>
+                <button type="button" className="btn primary" disabled={bulkBusy} onClick={applyBulk}>
+                  {bulkBusy ? t("applications.bulkApplying") : t("applications.bulkApply")}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {!showForm && apps.length === 0 ? (
         <div className="empty">{t("applications.noApps")}</div>
       ) : !showForm ? (
         <div className="grid">
           {apps.map((a) => (
-            <article className="card" key={a.id}>
+            <article className={`card ${selected.includes(a.id) ? "selected" : ""}`} key={a.id}>
               <header>
-                <h3>{a.name}</h3>
+                <label style={{ display: "flex", gap: 10, alignItems: "center", margin: 0, cursor: "pointer" }}>
+                  <input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggleSelect(a.id)} />
+                  <h3 style={{ margin: 0 }}>{a.name}</h3>
+                </label>
                 <span className={`badge ${a.enabled ? "" : "off"}`}>{a.enabled ? t("applications.online") : t("applications.disabled")}</span>
               </header>
               <div className="meta">{a.host}</div>

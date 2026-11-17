@@ -227,14 +227,60 @@ Enable the **Renovate GitHub App** on the repository so dependency PRs are opene
 
 ---
 
-## Optional: Authentik
+## Authentik SSO (two separate integrations)
 
-**Admin UI (OIDC)** — create an OIDC app with redirect  
-`https://<gate-host>:9444/api/auth/oidc/callback`, then set `GATE_AUTH_MODE` / `GATE_OIDC_*` and restart.
+The Gate supports Authentik in **two independent ways**. You can use one, both, or neither.
 
-**Apps behind The Gate** — Traefik outpost → `AUTHENTIK_FORWARD_URL` → app auth mode **Authentik SSO**.
+### A) Admin UI login (OIDC)
 
-Authentik must be reachable from The Gate Docker network.
+Protects **only** the Gate panel (`https://<host>:9444`).
+
+1. In Authentik create an **OIDC / OAuth2** application.
+2. Redirect URI: `https://<gate-host>:9444/api/auth/oidc/callback`
+3. In `.env`:
+
+```env
+GATE_AUTH_MODE=both
+GATE_OIDC_ISSUER=https://auth.example.com/application/o/the-gate/
+GATE_OIDC_CLIENT_ID=...
+GATE_OIDC_CLIENT_SECRET=...
+GATE_OIDC_REDIRECT_URL=https://gate.example.com:9444/api/auth/oidc/callback
+```
+
+4. `docker compose up -d` and use **Sign in with Authentik / OIDC** on the login page.
+
+`local` = password only · `oidc` = Authentik only · `both` = either.
+
+### B) Per-application SSO (Traefik forward-auth) — already built-in
+
+Protects **each selected Application** (public host → upstream), not the admin UI.
+
+| Piece | Where |
+|-------|--------|
+| Outpost URL (global) | `.env` → `AUTHENTIK_FORWARD_URL` |
+| SSO on/off per app | UI → Applications → **Access auth** → **Authentik SSO** |
+
+Default:
+
+```env
+AUTHENTIK_FORWARD_URL=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
+```
+
+**Setup checklist**
+
+1. Authentik (and its Traefik/Proxy **Outpost**) must be reachable from The Gate Docker network.
+2. In Authentik: Application + Provider (forward-auth / proxy) for the **public hostnames** of your Gate apps (e.g. `app.example.com`).
+3. Attach that Application to the Outpost; set access policies (groups) in Authentik.
+4. In The Gate: edit the app → Access auth → **Authentik SSO** → Save (Traefik sync attaches `authentik-forward`).
+
+Flow: browser → Traefik → Authentik outpost → if allowed → upstream.  
+Headers such as `X-authentik-username` / `groups` / `email` are forwarded.
+
+**Notes**
+
+- Auth modes per app: `none` | `basic` | `authentik` (mutually exclusive on that app).
+- One shared `AUTHENTIK_FORWARD_URL` for all apps; policies/domains live in Authentik.
+- Admin OIDC and per-app forward-auth do **not** replace each other.
 
 ---
 

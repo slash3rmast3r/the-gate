@@ -92,6 +92,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, syncer *traefiksync.Syncer) *gin.
 	{
 		api.GET("/applications", s.listApps)
 		api.POST("/applications", s.createApp)
+		api.POST("/applications/bulk", s.bulkUpdateApps)
 		api.GET("/applications/:id", s.getApp)
 		api.PUT("/applications/:id", s.updateApp)
 		api.DELETE("/applications/:id", s.deleteApp)
